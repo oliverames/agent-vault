@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>Agent Vault</string>
+	<key>CFBundleExecutable</key>
+	<string>AgentVault</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.oliverames.AgentVault</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>AgentVault</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0-beta.1</string>
+	<key>CFBundleVersion</key>
+	<string>101</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.developer-tools</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 Oliver Ames. Personal use.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Agent Vault scans your Desktop for AI configuration files (CLAUDE.md, AGENTS.md, etc.).</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Agent Vault scans your Documents folder for project CLAUDE.md, AGENTS.md, WORKLOG.md, and .remember/ buffers.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Agent Vault scans your Downloads folder for skill files.</string>
+</dict>
+</plist>

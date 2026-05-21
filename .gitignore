@@ -1,0 +1,22 @@
+# SwiftPM
+.build/
+.swiftpm/
+
+# Built app bundle
+build/
+dist/
+
+# Xcode
+xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+
+# macOS
+.DS_Store
+
+# Session buffer
+.remember/
+
+# Logs
+*.log

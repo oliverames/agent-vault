@@ -1,0 +1,214 @@
+import Foundation
+
+/// Result of one scan pass.
+struct ScanResult: Sendable {
+    var artifacts: [Artifact]
+    /// Roots that returned an access-denied error. The UI surfaces these
+    /// behind a "Grant Full Disk Access" banner.
+    var deniedRoots: [URL]
+    /// Total files visited (for progress UI).
+    var visitedCount: Int
+    /// How long the scan took.
+    var duration: TimeInterval
+}
+
+/// Background scanner. One actor instance per app; UI calls `scan(roots:)`
+/// and awaits the result. The scanner never touches `@MainActor` state.
+actor Scanner {
+    private let classifier: ArtifactClassifier
+    /// Directory names skipped wholesale regardless of context. `.github`
+    /// is pruned because VS Code / Antigravity extensions ship GitHub
+    /// Actions workflow metadata under `.github/skills/` which collides
+    /// with our SKILL.md classifier but isn't user-facing.
+    private let prunedDirectoryNames: Set<String> = [
+        ".git",
+        ".github",
+        "node_modules",
+        ".venv",
+        "venv",
+        ".build",
+        "DerivedData",
+        ".next",
+        "dist",
+        "build",
+        ".Trash",
+    ]
+    /// Parent/child name pairs that, when seen mid-walk, cause the child to
+    /// be pruned. Used to skip the plugin-cache and plugin-marketplace
+    /// subtrees while still walking the rest of `~/.claude`, `~/.codex`, etc.
+    /// These mirror the non-canonical `ScanRoot`s so opting in via the
+    /// "showCached" toggle adds them back as separate scan passes without
+    /// double-counting.
+    private let prunedParentChildPairs: [(parent: String, child: String)] = [
+        ("plugins", "marketplaces"),
+        ("plugins", "cache"),
+        ("plugins", ".marketplace-plugin-source-staging"),
+        (".codex", ".tmp"),
+        (".claude", "scheduled-tasks"),
+        (".claude", "shell-snapshots"),
+        (".claude", "todos"),
+        (".claude", "statsig"),
+    ]
+    /// Path substrings that mean "this is a backup or staging copy".
+    /// Anything matching is skipped wholesale.
+    private let backupPathSubstrings: [String] = [
+        "/.codex-backups/",
+        "/.bak/",
+        "/work-backups/",
+        "/file-backups/",
+        "/archived_sessions/",
+        "/local-agent-mode-sessions/",
+        "/Documents/Codex/2026-",        // dated codex backup trees
+        "/Brew Backups/",
+    ]
+
+    init(classifier: ArtifactClassifier) {
+        self.classifier = classifier
+    }
+
+    /// Scan every root, accumulating artifacts. Roots that can't be opened
+    /// because of TCC denial are recorded in `deniedRoots` rather than
+    /// thrown. Other errors are silently skipped so one bad subtree doesn't
+    /// abort the whole pass.
+    ///
+    /// - Parameter forceWalk: paths that should be walked even if they match
+    ///   `prunedParentChildPairs`. When the user toggles "include caches" we
+    ///   pass the cache roots in via `roots` AND list them here so the
+    ///   pruner doesn't bail on them. Comparing by `standardizedFileURL`
+    ///   handles iCloud `Mobile Documents` symlinks correctly.
+    func scan(roots: [ScanRoot], forceWalk: [URL] = []) async -> ScanResult {
+        let start = Date()
+        var artifacts: [Artifact] = []
+        var denied: [URL] = []
+        var visited = 0
+        let forced = Set(forceWalk.map { $0.standardizedFileURL.path(percentEncoded: false) })
+
+        for root in roots {
+            let (rootArtifacts, isDenied, count) = scanRoot(root, forceWalkPaths: forced)
+            artifacts.append(contentsOf: rootArtifacts)
+            visited += count
+            if isDenied { denied.append(root.url) }
+        }
+
+        return ScanResult(
+            artifacts: dedupe(artifacts),
+            deniedRoots: denied,
+            visitedCount: visited,
+            duration: Date().timeIntervalSince(start)
+        )
+    }
+
+    /// Walk a single root. Returns `(artifacts, isDenied, visitedCount)`.
+    private func scanRoot(_ root: ScanRoot, forceWalkPaths: Set<String>) -> ([Artifact], Bool, Int) {
+        let fm = FileManager.default
+        let path = root.url.path(percentEncoded: false)
+
+        guard fm.fileExists(atPath: path) else {
+            return ([], false, 0)
+        }
+
+        // Quick probe: can we list this directory? If not, it's a TCC denial.
+        do {
+            _ = try fm.contentsOfDirectory(atPath: path)
+        } catch let error as NSError where error.code == NSFileReadNoPermissionError {
+            return ([], true, 0)
+        } catch {
+            // Other errors → treat as inaccessible but don't blame TCC.
+            return ([], false, 0)
+        }
+
+        let keys: [URLResourceKey] = [
+            .isDirectoryKey,
+            .contentModificationDateKey,
+            .fileSizeKey,
+            .nameKey,
+            .isSymbolicLinkKey,
+        ]
+
+        guard let enumerator = fm.enumerator(
+            at: root.url,
+            includingPropertiesForKeys: keys,
+            options: [],   // include hidden dirs (.remember, .claude, .codex, ...)
+            errorHandler: { _, _ in true }
+        ) else {
+            return ([], false, 0)
+        }
+
+        var artifacts: [Artifact] = []
+        var count = 0
+
+        while let item = enumerator.nextObject() as? URL {
+            count += 1
+
+            // Pull resource values in one shot.
+            guard let values = try? item.resourceValues(forKeys: Set(keys)) else { continue }
+            let isDirectory = values.isDirectory ?? false
+            let name = values.name ?? item.lastPathComponent
+
+            // Prune noisy / unwanted subtrees before classifying.
+            if isDirectory && prunedDirectoryNames.contains(name) {
+                enumerator.skipDescendants()
+                continue
+            }
+
+            // Skip anything inside a known backup/staging tree.
+            let itemPath = item.path(percentEncoded: false)
+            if backupPathSubstrings.contains(where: { itemPath.contains($0) }) {
+                if isDirectory { enumerator.skipDescendants() }
+                continue
+            }
+
+            // Parent-aware prune: skip plugin caches & marketplaces when
+            // they're descended into from a parent walk (e.g. ~/.claude),
+            // unless the user explicitly listed them in forceWalkPaths.
+            if isDirectory {
+                let parentName = item.deletingLastPathComponent().lastPathComponent
+                if prunedParentChildPairs.contains(where: { $0.parent == parentName && $0.child == name }) {
+                    let standardizedPath = item.standardizedFileURL.path(percentEncoded: false)
+                    if !forceWalkPaths.contains(standardizedPath) {
+                        enumerator.skipDescendants()
+                        continue
+                    }
+                }
+            }
+
+            // Skip symlinks to avoid double-counting (e.g. ~/CLAUDE.md →
+            // ~/.claude/CLAUDE.md). The symlink target will be discovered
+            // when we walk the actual location.
+            if values.isSymbolicLink == true { continue }
+
+            let modifiedAt = values.contentModificationDate ?? .distantPast
+            let sizeBytes = Int64(values.fileSize ?? 0)
+
+            if let artifact = classifier.classify(
+                url: item,
+                isDirectory: isDirectory,
+                modifiedAt: modifiedAt,
+                sizeBytes: sizeBytes
+            ) {
+                artifacts.append(artifact)
+
+                // If we matched a directory-backed artifact (.remember or
+                // memory), we don't need to enumerate its contents — the
+                // detail view loads children on demand.
+                if isDirectory {
+                    enumerator.skipDescendants()
+                }
+            }
+        }
+
+        return (artifacts, false, count)
+    }
+
+    /// Two scan roots can overlap (e.g. ~/Documents and a sub-path within
+    /// it). Dedupe by URL path so each artifact appears once.
+    private func dedupe(_ artifacts: [Artifact]) -> [Artifact] {
+        var seen = Set<String>()
+        var out: [Artifact] = []
+        out.reserveCapacity(artifacts.count)
+        for artifact in artifacts where seen.insert(artifact.id).inserted {
+            out.append(artifact)
+        }
+        return out
+    }
+}

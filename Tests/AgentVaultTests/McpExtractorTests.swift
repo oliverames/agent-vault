@@ -1,0 +1,73 @@
+import Foundation
+import Testing
+@testable import AgentVault
+
+@Suite("MCP extraction")
+struct McpExtractorTests {
+    @Test("extracts MCP servers from Codex config.toml")
+    func extractsCodexMCPServers() throws {
+        let configURL = try temporaryFile(
+            name: "config.toml",
+            contents: """
+            [mcp_servers.github]
+            command = "npx"
+            args = ["-y", "@modelcontextprotocol/server-github"]
+
+            [mcp_servers."local files"]
+            command = "uvx"
+            """
+        )
+        let artifact = configArtifact(url: configURL)
+
+        let mcps = McpExtractor().extract(from: [artifact])
+
+        #expect(Set(mcps.map(\.title)) == ["github", "local files"])
+        #expect(mcps.allSatisfy { $0.category == .mcp })
+        #expect(mcps.allSatisfy { $0.source == .codex })
+    }
+
+    @Test("extracts MCP servers from Claude JSON settings")
+    func extractsClaudeMCPServers() throws {
+        let settingsURL = try temporaryFile(
+            name: "settings.json",
+            contents: """
+            {
+              "mcpServers": {
+                "filesystem": {
+                  "command": "npx",
+                  "args": ["-y", "@modelcontextprotocol/server-filesystem"]
+                }
+              }
+            }
+            """
+        )
+        let artifact = configArtifact(url: settingsURL)
+
+        let mcps = McpExtractor().extract(from: [artifact])
+
+        #expect(mcps.count == 1)
+        #expect(mcps.first?.title == "filesystem")
+        #expect(mcps.first?.subtitle?.contains("npx") == true)
+    }
+
+    private func configArtifact(url: URL) -> Artifact {
+        Artifact(
+            url: url,
+            category: .configFile,
+            source: ArtifactSource.infer(from: url),
+            isCustom: false,
+            title: url.lastPathComponent,
+            modifiedAt: .now,
+            sizeBytes: 0
+        )
+    }
+
+    private func temporaryFile(name: String, contents: String) throws -> URL {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appending(path: "AgentVaultTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appending(path: name)
+        try contents.write(to: url, atomically: true, encoding: .utf8)
+        return url
+    }
+}
