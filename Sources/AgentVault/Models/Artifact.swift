@@ -39,6 +39,7 @@ struct Artifact: Identifiable, Hashable, Sendable {
     let metadata: ArtifactMetadata
 
     init(
+        id: String? = nil,
         url: URL,
         category: ArtifactCategory,
         source: ArtifactSource,
@@ -50,7 +51,7 @@ struct Artifact: Identifiable, Hashable, Sendable {
         tags: [String] = [],
         metadata: ArtifactMetadata = .empty
     ) {
-        self.id = url.path(percentEncoded: false)
+        self.id = id ?? url.path(percentEncoded: false)
         self.url = url
         self.category = category
         self.source = source

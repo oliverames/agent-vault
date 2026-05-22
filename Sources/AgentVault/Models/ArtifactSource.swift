@@ -30,6 +30,9 @@ enum ArtifactSource: String, CaseIterable, Identifiable, Sendable, Hashable {
         if path.contains("/.codex/") {
             return .codex
         }
+        if path.contains("/.codex-plugin/") {
+            return .codex
+        }
         if path.contains("/.antigravity/") {
             return .antigravity
         }

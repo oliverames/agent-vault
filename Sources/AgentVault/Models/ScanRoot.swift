@@ -10,12 +10,17 @@ struct ScanRoot: Identifiable, Hashable, Sendable {
     /// default. `false` for caches/marketplaces hidden behind the "show
     /// installed/cached" toggle.
     let isCanonical: Bool
+    /// Roots the user added from Settings. They scan with canonical roots and
+    /// can be removed without editing source defaults.
+    let isUserAdded: Bool
 
-    init(url: URL, displayName: String, isCanonical: Bool) {
-        self.id = url.path(percentEncoded: false)
-        self.url = url
+    init(url: URL, displayName: String, isCanonical: Bool, isUserAdded: Bool = false) {
+        let standardized = url.standardizedFileURL
+        self.id = standardized.path(percentEncoded: false)
+        self.url = standardized
         self.displayName = displayName
         self.isCanonical = isCanonical
+        self.isUserAdded = isUserAdded
     }
 }
 

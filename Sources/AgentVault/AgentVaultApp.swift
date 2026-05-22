@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 @main
 struct AgentVaultApp: App {
@@ -21,6 +22,25 @@ struct AgentVaultApp: App {
                     Task { await store.rescan() }
                 }
                 .keyboardShortcut("r", modifiers: [.command])
+
+                Divider()
+
+                Button("Reveal Selected in Finder") {
+                    if let artifact = store.selectedArtifact {
+                        NSWorkspace.shared.activateFileViewerSelecting([artifact.url])
+                    }
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(store.selectedArtifact == nil)
+
+                Button("Copy Selected Path") {
+                    if let artifact = store.selectedArtifact {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(artifact.url.path(percentEncoded: false), forType: .string)
+                    }
+                }
+                .keyboardShortcut("c", modifiers: [.command, .option])
+                .disabled(store.selectedArtifact == nil)
             }
         }
 

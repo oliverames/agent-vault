@@ -107,14 +107,10 @@ actor Scanner {
             return ([], false, 0)
         }
 
-        // Quick probe: can we list this directory? If not, it's a TCC denial.
-        do {
-            _ = try fm.contentsOfDirectory(atPath: path)
-        } catch let error as NSError where error.code == NSFileReadNoPermissionError {
+        // Avoid a full directory listing as the access probe. File Provider
+        // backed roots can block there before the scan publishes any results.
+        guard fm.isReadableFile(atPath: path) else {
             return ([], true, 0)
-        } catch {
-            // Other errors → treat as inaccessible but don't blame TCC.
-            return ([], false, 0)
         }
 
         let keys: [URLResourceKey] = [

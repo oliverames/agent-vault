@@ -104,7 +104,8 @@ struct ArtifactClassifier: Sendable {
         case "plugin.json":
             return pluginArtifact(url: url, modifiedAt: modifiedAt, sizeBytes: sizeBytes)
         case "settings.json", "settings.local.json",
-             "config.toml", "argv.json", "claude_desktop_config.json":
+             "config.toml", "argv.json", "claude_desktop_config.json",
+             ".mcp.json", "mcp.json":
             return configArtifact(url: url, name: name, modifiedAt: modifiedAt, sizeBytes: sizeBytes)
         default:
             return nil

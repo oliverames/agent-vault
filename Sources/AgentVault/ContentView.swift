@@ -49,8 +49,11 @@ struct ContentView: View {
             NavigationSplitView(columnVisibility: $columnVisibility) {
                 SidebarView()
                     .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 340)
-            } detail: {
+            } content: {
                 CapabilityMatrixView()
+                    .navigationSplitViewColumnWidth(min: 520, ideal: 760)
+            } detail: {
+                ArtifactDetailView()
             }
         }
     }

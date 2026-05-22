@@ -6,58 +6,59 @@ struct SidebarView: View {
     var body: some View {
         @Bindable var bindable = store
 
-        List {
-            Section("Sources") {
-                SourceRow(
-                    label: "All Sources",
-                    symbol: "circle.grid.2x2",
-                    count: nil,
-                    isSelected: store.selectedSource == nil
-                ) {
-                    store.selectedSource = nil
-                }
-                ForEach(ArtifactSource.allCases) { source in
+        VStack(spacing: 0) {
+            List {
+                Section("Sources") {
                     SourceRow(
-                        label: source.rawValue,
-                        symbol: source.sfSymbol,
-                        count: store.sourceCounts[source] ?? 0,
-                        isSelected: store.selectedSource == source
+                        label: "All Sources",
+                        symbol: "circle.grid.2x2",
+                        count: store.sourceScopeCount,
+                        isSelected: store.selectedSource == nil
                     ) {
-                        store.selectedSource = (store.selectedSource == source) ? nil : source
+                        store.selectedSource = nil
+                    }
+                    ForEach(ArtifactSource.allCases) { source in
+                        SourceRow(
+                            label: source.rawValue,
+                            symbol: source.sfSymbol,
+                            count: store.sourceCounts[source] ?? 0,
+                            isSelected: store.selectedSource == source
+                        ) {
+                            store.selectedSource = (store.selectedSource == source) ? nil : source
+                        }
                     }
                 }
-            }
 
-            Section("Categories") {
-                CategoryRow(
-                    label: "All Categories",
-                    symbol: "tray.2",
-                    count: store.artifacts.count,
-                    isSelected: store.selectedCategory == nil
-                ) {
-                    store.selectedCategory = nil
+                Section("Filters") {
+                    Toggle("Custom only", isOn: $bindable.showCustomOnly)
+                        .toggleStyle(.switch)
+                    Toggle("Include caches & marketplaces", isOn: $bindable.showCached)
+                        .toggleStyle(.switch)
                 }
-                ForEach(ArtifactCategory.allCases) { category in
+
+                Section("Categories") {
                     CategoryRow(
-                        label: category.displayName,
-                        symbol: category.sfSymbol,
-                        count: store.sidebarCounts[category] ?? 0,
-                        isSelected: store.selectedCategory == category
+                        label: "All Categories",
+                        symbol: "tray.2",
+                        count: store.categoryScopeCount,
+                        isSelected: store.selectedCategory == nil
                     ) {
-                        store.selectedCategory = (store.selectedCategory == category) ? nil : category
+                        store.selectedCategory = nil
+                    }
+                    ForEach(ArtifactCategory.allCases) { category in
+                        CategoryRow(
+                            label: category.displayName,
+                            symbol: category.sfSymbol,
+                            count: store.sidebarCounts[category] ?? 0,
+                            isSelected: store.selectedCategory == category
+                        ) {
+                            store.selectedCategory = (store.selectedCategory == category) ? nil : category
+                        }
                     }
                 }
             }
+            .listStyle(.sidebar)
 
-            Section("Filters") {
-                Toggle("Custom only", isOn: $bindable.showCustomOnly)
-                    .toggleStyle(.switch)
-                Toggle("Include caches & marketplaces", isOn: $bindable.showCached)
-                    .toggleStyle(.switch)
-            }
-        }
-        .listStyle(.sidebar)
-        .safeAreaInset(edge: .bottom) {
             ScanStatusFooter()
         }
     }
@@ -181,7 +182,8 @@ private struct ScanStatusFooter: View {
     private var statusTitle: String {
         switch store.phase {
         case .idle: "Ready"
-        case .scanning: "Scanning…"
+        case .scanning:
+            store.artifacts.isEmpty ? "Scanning..." : "\(store.artifacts.count) artifacts found"
         case .done: "\(store.artifacts.count) artifacts"
         case .failed(let msg): "Scan failed: \(msg)"
         }
@@ -189,6 +191,10 @@ private struct ScanStatusFooter: View {
 
     private var statusDetail: String {
         switch store.phase {
+        case .scanning:
+            store.lastVisitedCount == 0
+                ? ""
+                : "\(store.lastVisitedCount) files so far"
         case .done(let visited, let duration):
             "\(visited) files in \(String(format: "%.1f", duration))s"
         default:

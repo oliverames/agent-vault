@@ -11,6 +11,7 @@
 <p align="center">
   <code>10 categories</code> &bull;
   <code>Coverage matrix</code> &bull;
+  <code>Custom roots</code> &bull;
   <code>SwiftUI · macOS 26</code> &bull;
   <code>~25k files in 2.6s</code>
 </p>
@@ -38,7 +39,7 @@ It is inspired by Glaze's [Skill Vault](https://www.glaze.app/app/skill-vault-vD
 
 ## Beta status
 
-`1.0.0-beta.1` is the first GitHub beta. It is designed for local, personal use on macOS 26 while the editing and cross-runtime management surfaces harden. The coverage matrix is intentionally read-only: it shows where skills, plugins, and MCP servers are present across scanned runtimes, but it does not mutate runtime configs yet.
+`1.0.0-beta.2` is the current GitHub beta. It is designed for local, personal use on macOS 26 while the editing and cross-runtime management surfaces harden. The coverage matrix is intentionally read-only: it shows where skills, plugins, and MCP servers are present across scanned runtimes, but it does not mutate runtime configs yet.
 
 ## Why this exists
 
@@ -48,14 +49,14 @@ Agent Vault knows where each runtime keeps its stuff. It distinguishes the files
 
 If you publish your own marketplaces and install them across runtimes, Agent Vault gives you the "publishing dashboard" view that the runtimes themselves don't ship.
 
-The Coverage view adds a dashboard-style matrix for skills, plugins, and MCP servers. It groups scanned artifacts by capability and marks whether Agent Vault found each one under Claude Code, Codex, Antigravity, or another project/source root.
+The Coverage view adds a dashboard-style matrix for skills, plugins, and MCP servers. It groups scanned artifacts by capability, marks whether Agent Vault found each one under Claude Code, Codex, Antigravity, or another project/source root, and opens the selected item in the detail pane.
 
 ## What it surfaces
 
 | Category | What gets matched | Sources |
 |---|---|---|
 | **Skills** | `SKILL.md` files (with parsed YAML frontmatter for author, version, etc.) | User project plugin dirs, Codex bundled skills, optionally installed marketplaces |
-| **MCPs** | One artifact per server entry parsed out of `settings.json` (Claude) and `config.toml` (Codex) | `~/.claude/settings.json`, `~/.codex/config.toml`, `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| **MCPs** | One artifact per server entry parsed out of runtime and plugin config files | `settings.json`, `config.toml`, `.mcp.json`, `mcp.json`, `claude_desktop_config.json` |
 | **Marketplaces** | `marketplace.json` files, with installed-into detection | User repos + opt-in installed clones |
 | **Plugins** | `plugin.json` files | User repos + opt-in installed clones |
 | **Config Files** | `settings.json`, `settings.local.json`, `config.toml`, `argv.json`, `claude_desktop_config.json` | Each runtime's home + project-local `.claude/` dirs |
@@ -83,17 +84,18 @@ First launch will scan your canonical AI directories (typically 20k–60k files 
 
 **`@Observable` store, actor scanner.** UI state is a `@MainActor @Observable VaultStore`. File I/O happens in `actor Scanner` off the main thread. Mtime-based conflict detection in `FileBuffer` guards the in-app editor against silent overwrites from concurrent Claude sessions writing the same file (auto-memory `/dream`, `.remember` hook, etc.).
 
-**Editing is guarded by mtime conflict detection.** The Beta 1 editor uses an AppKit `NSTextView` bridge instead of SwiftUI's basic `TextEditor`, giving markdown/source files native undo, find-panel support, monospaced editing, and spell checking for Markdown. Full MarkEdit/CodeMirror vendoring is still planned, but this keeps the first beta offline and reliable.
+**Editing is guarded by mtime conflict detection.** The editor uses an AppKit `NSTextView` bridge instead of SwiftUI's basic `TextEditor`, giving markdown/source files native undo, find-panel support, monospaced editing, and spell checking for Markdown. Full MarkEdit/CodeMirror vendoring is still planned, but the native editor keeps the beta offline and reliable.
 
 **Provenance is parsed, not guessed.** Each skill artifact carries metadata extracted from its SKILL.md YAML frontmatter and its enclosing plugin's `plugin.json`. The detail view shows author, version, marketplace, plugin, and a clickable link to the source repository when known. For marketplaces, `installedInto` is computed by probing `~/.claude/plugins/marketplaces/<name>/` (Claude) and `~/.codex/plugins/cache/<name>/` (Codex — different layout!).
 
 ## Configuration
 
-Scan roots are stored as defaults in [`Sources/AgentVault/Models/ScanRoot.swift`](Sources/AgentVault/Models/ScanRoot.swift) and split into canonical vs opt-in. The `isCustom` heuristic lives in [`Sources/AgentVault/Models/IsCustomHeuristic.swift`](Sources/AgentVault/Models/IsCustomHeuristic.swift) and is explicit about authoring roots vs install roots, with a UserDefaults-backed per-artifact override.
+Scan roots are stored as defaults in [`Sources/AgentVault/Models/ScanRoot.swift`](Sources/AgentVault/Models/ScanRoot.swift) and split into canonical vs opt-in. User-added roots are managed in Settings and persisted in UserDefaults. The `isCustom` heuristic lives in [`Sources/AgentVault/Models/IsCustomHeuristic.swift`](Sources/AgentVault/Models/IsCustomHeuristic.swift) and is explicit about authoring roots vs install roots, with a UserDefaults-backed per-artifact override.
 
 | Setting | Default | How to change |
 |---|---|---|
 | Canonical scan roots | 7 locations | Edit `ScanRoot.defaults()` |
+| Custom scan roots | none | Settings → Scan Roots → Add Root |
 | Opt-in scan roots (caches, marketplaces) | off | Toggle "Include caches & marketplaces" in sidebar |
 | Pruned subtrees | parent-child rules | Edit `Scanner.prunedParentChildPairs` |
 | Custom-override per artifact | none | Will be exposed via right-click in a later version |
@@ -126,10 +128,10 @@ The `.app` is ad-hoc signed against the entitlements in `AppResources/AgentVault
 
 ## Roadmap
 
-- **MarkEdit-based markdown editor** — vendor [MarkEdit](https://github.com/MarkEdit-app/MarkEdit) (MIT) for syntax-highlighted, theme-aware Markdown editing once the Beta 1 AppKit editor proves the workflow.
+- **MarkEdit-based markdown editor** — vendor [MarkEdit](https://github.com/MarkEdit-app/MarkEdit) (MIT) for syntax-highlighted, theme-aware Markdown editing once the AppKit editor proves the workflow.
 - **Sync preferences across runtimes** — copy MCP entries and marketplace registrations between Claude Code and Codex.
 - **Marketplace dedupe** — collapse dual-host marketplaces (`claude-plugin/marketplace.json` + `codex/marketplace.json`) into one row with multi-host badges.
-- **In-app scan-root editor** — `NSOpenPanel`-based "Add a custom scan root" flow in Settings.
+- **Root enable/disable controls** — custom roots can be added and removed; per-root enable toggles are still a follow-up.
 - **Writable coverage matrix** — turn the read-only matrix into a config-safe sync surface after the scanner can prove source/override precedence.
 
 ---

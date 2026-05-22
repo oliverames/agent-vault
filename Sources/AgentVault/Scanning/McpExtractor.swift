@@ -18,7 +18,9 @@ struct McpExtractor: Sendable {
             switch name {
             case "settings.json",
                  "settings.local.json",
-                 "claude_desktop_config.json":
+                 "claude_desktop_config.json",
+                 ".mcp.json",
+                 "mcp.json":
                 out.append(contentsOf: parseJSON(at: artifact.url))
             case "config.toml":
                 out.append(contentsOf: parseTOML(at: artifact.url))
@@ -39,8 +41,11 @@ struct McpExtractor: Sendable {
         // The two known shapes:
         //   { "mcpServers": { "name": {...} } }
         //   { "claudeCodeSettings": { "mcpServers": ... } }   (unused, but cheap to check)
+        // Some plugin repos also use:
+        //   { "servers": { "name": {...} } }
         let dict = (top["mcpServers"] as? [String: Any])
             ?? ((top["claudeCodeSettings"] as? [String: Any])?["mcpServers"] as? [String: Any])
+            ?? (top["servers"] as? [String: Any])
             ?? [:]
 
         guard !dict.isEmpty else { return [] }
@@ -50,6 +55,7 @@ struct McpExtractor: Sendable {
             let entry = value as? [String: Any] ?? [:]
             let subtitle = subtitleFor(entry: entry)
             return Artifact(
+                id: virtualID(configURL: url, serverName: name),
                 url: url,
                 category: .mcp,
                 source: source(for: url),
@@ -65,7 +71,9 @@ struct McpExtractor: Sendable {
 
     private func subtitleFor(entry: [String: Any]) -> String {
         if let cmd = entry["command"] as? String {
-            let args = (entry["args"] as? [String])?.joined(separator: " ") ?? ""
+            let args = (entry["args"] as? [Any])?
+                .compactMap { $0 as? String }
+                .joined(separator: " ") ?? ""
             return args.isEmpty ? cmd : "\(cmd) \(args)"
         }
         if let url = entry["url"] as? String { return url }
@@ -111,6 +119,7 @@ struct McpExtractor: Sendable {
                 .map { String($0).trimmingCharacters(in: .whitespaces) }
 
             out.append(Artifact(
+                id: virtualID(configURL: url, serverName: name),
                 url: url,
                 category: .mcp,
                 source: .codex,
@@ -133,8 +142,12 @@ struct McpExtractor: Sendable {
         if path.contains("/.claude/") || path.contains("Application Support/Claude/") {
             return .claudeCode
         }
-        if path.contains("/.codex/") { return .codex }
+        if path.contains("/.codex/") || path.contains("/.codex-plugin/") { return .codex }
         return .other
+    }
+
+    private func virtualID(configURL: URL, serverName: String) -> String {
+        "\(configURL.path(percentEncoded: false))#mcp:\(serverName)"
     }
 
     private func fileAttributes(for url: URL) -> (modified: Date, size: Int64) {

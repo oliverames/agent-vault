@@ -43,6 +43,33 @@ struct ArtifactClassifierTests {
         #expect(artifact?.metadata.plugin == "demo-plugin")
     }
 
+    @Test("classifies MCP JSON manifests as config files")
+    func classifiesMCPJSONManifest() throws {
+        let root = try temporaryDirectory()
+        let manifestURL = root
+            .appending(path: ".codex-plugin", directoryHint: .isDirectory)
+            .appending(path: "mcp.json")
+        try FileManager.default.createDirectory(
+            at: manifestURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try #"{"mcpServers":{}}"#.write(to: manifestURL, atomically: true, encoding: .utf8)
+
+        let classifier = ArtifactClassifier(
+            heuristic: IsCustomHeuristic(authoringRoots: [root], installedRoots: [], excludeSegments: [], overrides: [:])
+        )
+        let artifact = classifier.classify(
+            url: manifestURL,
+            isDirectory: false,
+            modifiedAt: .now,
+            sizeBytes: 12
+        )
+
+        #expect(artifact?.category == .configFile)
+        #expect(artifact?.source == .codex)
+        #expect(artifact?.title == "mcp.json")
+    }
+
     private func temporaryDirectory() throws -> URL {
         let url = URL(fileURLWithPath: NSTemporaryDirectory())
             .appending(path: "AgentVaultTests-\(UUID().uuidString)", directoryHint: .isDirectory)

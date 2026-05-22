@@ -22,6 +22,7 @@ struct McpExtractorTests {
         let mcps = McpExtractor().extract(from: [artifact])
 
         #expect(Set(mcps.map(\.title)) == ["github", "local files"])
+        #expect(Set(mcps.map(\.id)).count == 2)
         #expect(mcps.allSatisfy { $0.category == .mcp })
         #expect(mcps.allSatisfy { $0.source == .codex })
     }
@@ -48,6 +49,33 @@ struct McpExtractorTests {
         #expect(mcps.count == 1)
         #expect(mcps.first?.title == "filesystem")
         #expect(mcps.first?.subtitle?.contains("npx") == true)
+    }
+
+    @Test("extracts MCP servers from plugin mcp.json")
+    func extractsPluginMCPManifest() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appending(path: "AgentVaultTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let manifestDirectory = root.appending(path: ".codex-plugin", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: manifestDirectory, withIntermediateDirectories: true)
+        let manifestURL = manifestDirectory.appending(path: "mcp.json")
+        try """
+        {
+          "servers": {
+            "local-tool": {
+              "command": "swift",
+              "args": ["run", "tool"]
+            }
+          }
+        }
+        """.write(to: manifestURL, atomically: true, encoding: .utf8)
+
+        let artifact = configArtifact(url: manifestURL)
+        let mcps = McpExtractor().extract(from: [artifact])
+
+        #expect(mcps.count == 1)
+        #expect(mcps.first?.id == "\(manifestURL.path(percentEncoded: false))#mcp:local-tool")
+        #expect(mcps.first?.source == .codex)
+        #expect(mcps.first?.subtitle == "swift run tool")
     }
 
     private func configArtifact(url: URL) -> Artifact {

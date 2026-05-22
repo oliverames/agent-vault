@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// Read-only coverage matrix inspired by cross-agent capability dashboards.
-/// It only reflects artifacts Agent Vault actually scanned, so Beta 1 avoids
-/// unreliable toggles or config mutation across runtimes.
+/// It only reflects artifacts Agent Vault actually scanned, so it avoids
+/// unreliable toggles or config mutation across runtimes for now.
 struct CapabilityMatrixView: View {
     @Environment(VaultStore.self) private var store
     @State private var category: ArtifactCategory = .skill

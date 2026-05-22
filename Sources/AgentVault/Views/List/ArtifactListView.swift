@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct ArtifactListView: View {
     @Environment(VaultStore.self) private var store
@@ -22,6 +23,15 @@ struct ArtifactListView: View {
         }
         .navigationTitle(navTitle)
         .navigationSubtitle("\(items.count) item\(items.count == 1 ? "" : "s")")
+        .safeAreaInset(edge: .top) {
+            listControls(count: items.count)
+        }
+        .onAppear {
+            selectFirstIfNeeded(visibleIDs: items.map(\.id))
+        }
+        .onChange(of: items.map(\.id)) { _, ids in
+            selectFirstIfNeeded(visibleIDs: ids)
+        }
     }
 
     private var navTitle: String {
@@ -53,8 +63,7 @@ struct ArtifactListView: View {
             set: { store.selectedArtifactID = $0 }
         )) {
             ForEach(items) { artifact in
-                ArtifactRowView(artifact: artifact)
-                    .tag(artifact.id)
+                artifactRow(artifact)
             }
         }
         .listStyle(.inset)
@@ -71,8 +80,7 @@ struct ArtifactListView: View {
             ForEach(ordered) { category in
                 Section(category.displayName) {
                     ForEach(groups[category] ?? []) { artifact in
-                        ArtifactRowView(artifact: artifact)
-                            .tag(artifact.id)
+                        artifactRow(artifact)
                     }
                 }
             }
@@ -91,8 +99,7 @@ struct ArtifactListView: View {
             if !yours.isEmpty {
                 Section {
                     ForEach(yours) { artifact in
-                        ArtifactRowView(artifact: artifact)
-                            .tag(artifact.id)
+                        artifactRow(artifact)
                     }
                 } header: {
                     HStack {
@@ -106,8 +113,7 @@ struct ArtifactListView: View {
             if !installed.isEmpty {
                 Section {
                     ForEach(installed) { artifact in
-                        ArtifactRowView(artifact: artifact)
-                            .tag(artifact.id)
+                        artifactRow(artifact)
                     }
                 } header: {
                     HStack {
@@ -120,5 +126,90 @@ struct ArtifactListView: View {
             }
         }
         .listStyle(.inset)
+    }
+
+    private func listControls(count: Int) -> some View {
+        @Bindable var bindable = store
+
+        return HStack(spacing: 10) {
+            Label("\(count)", systemImage: "tray.full")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+
+            if hasActiveFilters {
+                Button {
+                    clearFilters()
+                } label: {
+                    Label("Clear", systemImage: "xmark.circle")
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+            }
+
+            Spacer()
+
+            Picker("Sort", selection: $bindable.sortOrder) {
+                ForEach(ArtifactSortOrder.allCases) { order in
+                    Text(order.rawValue).tag(order)
+                }
+            }
+            .pickerStyle(.menu)
+            .controlSize(.small)
+            .frame(width: 168)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.bar)
+    }
+
+    @ViewBuilder
+    private func artifactRow(_ artifact: Artifact) -> some View {
+        ArtifactRowView(artifact: artifact)
+            .tag(artifact.id)
+            .contextMenu {
+                Button {
+                    NSWorkspace.shared.activateFileViewerSelecting([artifact.url])
+                } label: {
+                    Label("Reveal in Finder", systemImage: "folder")
+                }
+
+                Button {
+                    NSWorkspace.shared.open(artifact.url)
+                } label: {
+                    Label("Open", systemImage: "arrow.up.right.square")
+                }
+
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(artifact.url.path(percentEncoded: false), forType: .string)
+                } label: {
+                    Label("Copy Path", systemImage: "document.on.document")
+                }
+            }
+    }
+
+    private var hasActiveFilters: Bool {
+        store.selectedCategory != nil
+            || store.selectedSource != nil
+            || store.showCustomOnly
+            || !store.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func clearFilters() {
+        store.selectedCategory = nil
+        store.selectedSource = nil
+        store.showCustomOnly = false
+        store.searchText = ""
+    }
+
+    private func selectFirstIfNeeded(visibleIDs: [Artifact.ID]) {
+        guard !visibleIDs.isEmpty else {
+            store.selectedArtifactID = nil
+            return
+        }
+        if let selected = store.selectedArtifactID, visibleIDs.contains(selected) {
+            return
+        }
+        store.selectedArtifactID = visibleIDs.first
     }
 }

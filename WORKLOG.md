@@ -1,5 +1,19 @@
 # Agent Vault — Worklog
 
+## 2026-05-22 — 1.0.0-beta.2 release pass
+
+- Raised app metadata to `1.0.0-beta.2` / build `102`.
+- Added persistent custom scan roots in Settings with an `NSOpenPanel` add flow and removable user-added roots.
+- Added inventory sort controls for recently modified, name, source, and size.
+- Made search and sidebar counts include paths and provenance metadata, so filtering by marketplace, plugin, author, or repo URL behaves as expected.
+- Fixed virtual MCP artifacts to use unique IDs per server entry instead of reusing the parent config file path.
+- Added `.mcp.json` / `mcp.json` classification and MCP extraction for plugin-local manifests, including `servers` and `mcpServers` JSON shapes.
+- Changed Coverage into a three-column flow so selecting a matrix row opens the artifact in the detail pane.
+- Added row context-menu actions and app menu commands for reveal/copy path on the selected artifact.
+- Reworked the sidebar footer and filter placement so the status panel does not cover controls at the default window size.
+- Changed scan publishing to update after each root and removed the blocking root directory-list probe, so a slow File Provider location no longer leaves the inventory blank.
+- Added Swift Testing coverage for plugin-local MCP manifests and MCP JSON classification.
+
 ## 2026-05-21 — 1.0.0-beta.1 release pass
 
 - Raised the app metadata to `1.0.0-beta.1` / build `101`.
@@ -80,5 +94,5 @@ Don't attempt all three in one session — Phase 1 first to validate the bridge 
 - **Sync preferences from X → Y** (e.g. copy MCPs from Claude config to Codex config). Future session.
 - **Marketplace dedupe**: `ames-plugins` shows as 2 entries because the project has separate `claude-plugin/marketplace.json` and `codex/marketplace.json` (dual-host pattern). Could merge into one row with multi-host badges.
 - **Symlink-aware source attribution**: items under `~/Developer/Projects/ames-plugins/` are currently labeled `Other` source — could intelligently tag them `Claude Code + Codex` since the dual-host pattern targets both.
-- **Settings → Add custom scan root** via `NSOpenPanel`.
+- **Per-root enable toggles** for custom roots.
 - Writable coverage matrix once config precedence is tested.

@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// MarkEdit-inspired native source editor for Beta 1.
+/// MarkEdit-inspired native source editor.
 ///
 /// Full CodeMirror/MarkEdit vendoring is intentionally deferred; this wraps
 /// `NSTextView` so editing is fast, undo-aware, find-panel friendly, and

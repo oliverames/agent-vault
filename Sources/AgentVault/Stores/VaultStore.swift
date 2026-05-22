@@ -27,6 +27,7 @@ final class VaultStore {
     var selectedCategory: ArtifactCategory? = nil
     var selectedSource: ArtifactSource? = nil
     var searchText: String = ""
+    var sortOrder: ArtifactSortOrder = .modifiedNewest
     var showCustomOnly: Bool = false
     var showCached: Bool = false {
         didSet { Task { await rescan() } }
@@ -52,7 +53,10 @@ final class VaultStore {
     init() {
         let overrides = Self.loadOverrides()
         let heuristic = IsCustomHeuristic.defaults(overrides: overrides)
-        self.scanRoots = ScanRoot.defaults()
+        self.scanRoots = Self.mergedRoots(
+            defaults: ScanRoot.defaults(),
+            customPaths: Self.loadCustomRootPaths()
+        )
         self.heuristic = heuristic
         self.scanner = Scanner(classifier: ArtifactClassifier(heuristic: heuristic))
     }
@@ -68,44 +72,50 @@ final class VaultStore {
         let forceWalk = showCached
             ? scanRoots.filter { !$0.isCanonical }.map(\.url)
             : []
-        let result = await scanner.scan(roots: activeRoots, forceWalk: forceWalk)
-        let mcps = mcpExtractor.extract(from: result.artifacts)
-        let combined = (result.artifacts + mcps).sorted { a, b in
-            // First by category order (matches sidebar), then by modified date desc.
-            if a.category != b.category {
-                return a.category.rawValue < b.category.rawValue
-            }
-            return a.modifiedAt > b.modifiedAt
+        let forcedPaths = Set(forceWalk.map { $0.standardizedFileURL.path(percentEncoded: false) })
+        let startedAt = Date()
+        var scannedArtifacts: [Artifact] = []
+        var denied: [URL] = []
+        var visited = 0
+
+        artifacts = []
+        deniedRoots = []
+        lastVisitedCount = 0
+        lastScanDuration = 0
+
+        for root in activeRoots {
+            let rootPath = root.url.standardizedFileURL.path(percentEncoded: false)
+            let rootForceWalk = forcedPaths.contains(rootPath) ? [root.url] : []
+            let result = await scanner.scan(roots: [root], forceWalk: rootForceWalk)
+
+            scannedArtifacts.append(contentsOf: result.artifacts)
+            denied.append(contentsOf: result.deniedRoots)
+            visited += result.visitedCount
+
+            publishScanProgress(
+                artifacts: scannedArtifacts,
+                deniedRoots: denied,
+                visited: visited,
+                duration: Date().timeIntervalSince(startedAt)
+            )
         }
-        artifacts = combined
-        deniedRoots = result.deniedRoots
-        lastVisitedCount = result.visitedCount
-        lastScanDuration = result.duration
-        phase = .done(visited: result.visitedCount, duration: result.duration)
+
+        let duration = Date().timeIntervalSince(startedAt)
+        publishScanProgress(
+            artifacts: scannedArtifacts,
+            deniedRoots: denied,
+            visited: visited,
+            duration: duration
+        )
+        phase = .done(visited: visited, duration: duration)
     }
 
     // MARK: - Derived
 
     var filteredArtifacts: [Artifact] {
-        var items = artifacts
-        if let cat = selectedCategory {
-            items = items.filter { $0.category == cat }
-        }
-        if let src = selectedSource {
-            items = items.filter { $0.source == src }
-        }
-        if showCustomOnly {
-            items = items.filter { $0.isCustom }
-        }
-        let q = searchText.trimmingCharacters(in: .whitespaces)
-        if !q.isEmpty {
-            items = items.filter {
-                $0.title.localizedCaseInsensitiveContains(q)
-                || ($0.subtitle?.localizedCaseInsensitiveContains(q) ?? false)
-                || $0.tags.contains(where: { $0.localizedCaseInsensitiveContains(q) })
-            }
-        }
-        return items
+        artifacts
+            .filter { matchesFilters($0, includeCategory: true, includeSource: true) }
+            .sorted(by: sortOrder.compare)
     }
 
     /// Map of category -> count for sidebar badges (respecting current
@@ -114,8 +124,7 @@ final class VaultStore {
     var sidebarCounts: [ArtifactCategory: Int] {
         var counts: [ArtifactCategory: Int] = [:]
         for artifact in artifacts {
-            if let src = selectedSource, artifact.source != src { continue }
-            if showCustomOnly, !artifact.isCustom { continue }
+            guard matchesFilters(artifact, includeCategory: false, includeSource: true) else { continue }
             counts[artifact.category, default: 0] += 1
         }
         return counts
@@ -125,9 +134,22 @@ final class VaultStore {
     var sourceCounts: [ArtifactSource: Int] {
         var counts: [ArtifactSource: Int] = [:]
         for artifact in artifacts {
+            guard matchesFilters(artifact, includeCategory: true, includeSource: false) else { continue }
             counts[artifact.source, default: 0] += 1
         }
         return counts
+    }
+
+    /// Count for the "All Categories" row, respecting every filter except the
+    /// current category selection.
+    var categoryScopeCount: Int {
+        artifacts.filter { matchesFilters($0, includeCategory: false, includeSource: true) }.count
+    }
+
+    /// Count for the "All Sources" row, respecting every filter except the
+    /// current source selection.
+    var sourceScopeCount: Int {
+        artifacts.filter { matchesFilters($0, includeCategory: true, includeSource: false) }.count
     }
 
     var selectedArtifact: Artifact? {
@@ -148,9 +170,100 @@ final class VaultStore {
         Task { await rescan() }
     }
 
+    private func publishScanProgress(
+        artifacts scannedArtifacts: [Artifact],
+        deniedRoots: [URL],
+        visited: Int,
+        duration: TimeInterval
+    ) {
+        let mcps = mcpExtractor.extract(from: scannedArtifacts)
+        let combined = dedupe(scannedArtifacts + mcps).sorted { a, b in
+            // First by category order (matches sidebar), then by modified date desc.
+            if a.category != b.category {
+                return a.category.rawValue < b.category.rawValue
+            }
+            return a.modifiedAt > b.modifiedAt
+        }
+
+        artifacts = combined
+        self.deniedRoots = deniedRoots
+        lastVisitedCount = visited
+        lastScanDuration = duration
+
+        if let selectedArtifactID, combined.contains(where: { $0.id == selectedArtifactID }) {
+            return
+        }
+        selectedArtifactID = filteredArtifacts.first?.id ?? combined.first?.id
+    }
+
+    private func dedupe(_ artifacts: [Artifact]) -> [Artifact] {
+        var seen = Set<String>()
+        var out: [Artifact] = []
+        out.reserveCapacity(artifacts.count)
+        for artifact in artifacts where seen.insert(artifact.id).inserted {
+            out.append(artifact)
+        }
+        return out
+    }
+
+    // MARK: - Custom scan roots
+
+    @discardableResult
+    func addCustomScanRoot(_ url: URL) -> Bool {
+        let root = Self.customRoot(for: url)
+        guard !scanRoots.contains(where: { $0.id == root.id }) else { return false }
+
+        scanRoots.append(root)
+        saveCustomRootsFromState()
+        Task { await rescan() }
+        return true
+    }
+
+    func removeCustomScanRoot(_ root: ScanRoot) {
+        guard root.isUserAdded else { return }
+        scanRoots.removeAll { $0.id == root.id && $0.isUserAdded }
+        saveCustomRootsFromState()
+        Task { await rescan() }
+    }
+
+    // MARK: - Filtering
+
+    private func matchesFilters(
+        _ artifact: Artifact,
+        includeCategory: Bool,
+        includeSource: Bool
+    ) -> Bool {
+        if includeCategory, let selectedCategory, artifact.category != selectedCategory {
+            return false
+        }
+        if includeSource, let selectedSource, artifact.source != selectedSource {
+            return false
+        }
+        if showCustomOnly, !artifact.isCustom {
+            return false
+        }
+        return matchesSearch(artifact)
+    }
+
+    private func matchesSearch(_ artifact: Artifact) -> Bool {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return true }
+
+        return artifact.title.localizedCaseInsensitiveContains(query)
+            || (artifact.subtitle?.localizedCaseInsensitiveContains(query) ?? false)
+            || artifact.url.path(percentEncoded: false).localizedCaseInsensitiveContains(query)
+            || artifact.tags.contains(where: { $0.localizedCaseInsensitiveContains(query) })
+            || (artifact.metadata.author?.localizedCaseInsensitiveContains(query) ?? false)
+            || (artifact.metadata.version?.localizedCaseInsensitiveContains(query) ?? false)
+            || (artifact.metadata.marketplace?.localizedCaseInsensitiveContains(query) ?? false)
+            || (artifact.metadata.plugin?.localizedCaseInsensitiveContains(query) ?? false)
+            || (artifact.metadata.repoURL?.absoluteString.localizedCaseInsensitiveContains(query) ?? false)
+    }
+
     // MARK: - UserDefaults
 
     private static let overridesKey = "com.oliverames.AgentVault.customOverrides"
+    private static let customRootsKey = "com.oliverames.AgentVault.customScanRoots"
 
     private static func loadOverrides() -> [String: Bool] {
         UserDefaults.standard.dictionary(forKey: overridesKey) as? [String: Bool] ?? [:]
@@ -158,5 +271,53 @@ final class VaultStore {
 
     private static func saveOverrides(_ value: [String: Bool]) {
         UserDefaults.standard.set(value, forKey: overridesKey)
+    }
+
+    private static func loadCustomRootPaths() -> [String] {
+        UserDefaults.standard.stringArray(forKey: customRootsKey) ?? []
+    }
+
+    private static func saveCustomRootPaths(_ value: [String]) {
+        UserDefaults.standard.set(value, forKey: customRootsKey)
+    }
+
+    private static func mergedRoots(defaults: [ScanRoot], customPaths: [String]) -> [ScanRoot] {
+        var seen = Set(defaults.map(\.id))
+        var roots = defaults
+
+        for path in customPaths {
+            let root = customRoot(for: URL(fileURLWithPath: path, isDirectory: true))
+            guard seen.insert(root.id).inserted else { continue }
+            roots.append(root)
+        }
+        return roots
+    }
+
+    private static func customRoot(for url: URL) -> ScanRoot {
+        ScanRoot(
+            url: url,
+            displayName: displayName(for: url),
+            isCanonical: true,
+            isUserAdded: true
+        )
+    }
+
+    private static func displayName(for url: URL) -> String {
+        var path = url.standardizedFileURL.path(percentEncoded: false)
+        let home = NSHomeDirectory()
+        if path.hasPrefix(home) {
+            path = "~" + path.dropFirst(home.count)
+        }
+        return path.replacingOccurrences(
+            of: "~/Library/Mobile Documents/com~apple~CloudDocs",
+            with: "~/iCloud"
+        )
+    }
+
+    private func saveCustomRootsFromState() {
+        let paths = scanRoots
+            .filter(\.isUserAdded)
+            .map { $0.url.path(percentEncoded: false) }
+        Self.saveCustomRootPaths(paths)
     }
 }

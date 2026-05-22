@@ -1,7 +1,9 @@
 import SwiftUI
+import AppKit
 
 struct SettingsView: View {
     @Environment(VaultStore.self) private var store
+    @State private var rootError: String?
 
     var body: some View {
         TabView {
@@ -26,8 +28,34 @@ struct SettingsView: View {
 
             List {
                 Section("Canonical") {
-                    ForEach(store.scanRoots.filter { $0.isCanonical }) { root in
+                    ForEach(store.scanRoots.filter { $0.isCanonical && !$0.isUserAdded }) { root in
                         ScanRootRow(root: root)
+                    }
+                }
+                Section {
+                    let customRoots = store.scanRoots.filter(\.isUserAdded)
+                    if customRoots.isEmpty {
+                        Text("No custom roots")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(customRoots) { root in
+                            ScanRootRow(root: root) {
+                                store.removeCustomScanRoot(root)
+                            }
+                        }
+                    }
+                } header: {
+                    HStack {
+                        Text("Custom")
+                        Spacer()
+                        Button {
+                            addCustomRoot()
+                        } label: {
+                            Label("Add", systemImage: "folder.badge.plus")
+                        }
+                        .buttonStyle(.borderless)
+                        .labelStyle(.iconOnly)
+                        .help("Add Custom Scan Root")
                     }
                 }
                 Section("Caches & Marketplaces (opt-in)") {
@@ -44,7 +72,19 @@ struct SettingsView: View {
                 .toggleStyle(.switch)
 
             HStack {
+                if let rootError {
+                    Text(rootError)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
                 Spacer()
+                Button {
+                    addCustomRoot()
+                } label: {
+                    Label("Add Root", systemImage: "folder.badge.plus")
+                }
+                .buttonStyle(.glass)
+
                 Button("Rescan Now") {
                     Task { await store.rescan() }
                 }
@@ -56,17 +96,35 @@ struct SettingsView: View {
     private var aboutTab: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Agent Vault").font(.largeTitle.bold())
-            Text("Version 1.0.0-beta.1").foregroundStyle(.secondary)
+            Text("Version 1.0.0-beta.2").foregroundStyle(.secondary)
             Text("A unified inventory of skills, MCPs, plugins, marketplaces, config files, instruction files, work logs, remember buffers, and memory stores across Claude Code, Codex, and Antigravity on your Mac.")
                 .fixedSize(horizontal: false, vertical: true)
             Spacer()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
+
+    private func addCustomRoot() {
+        let panel = NSOpenPanel()
+        panel.title = "Add Scan Root"
+        panel.prompt = "Add"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = false
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        if store.addCustomScanRoot(url) {
+            rootError = nil
+        } else {
+            rootError = "That root is already being scanned."
+        }
+    }
 }
 
 private struct ScanRootRow: View {
     let root: ScanRoot
+    var onRemove: (() -> Void)? = nil
 
     var body: some View {
         HStack {
@@ -85,6 +143,15 @@ private struct ScanRootRow: View {
                 Text("not found")
                     .font(.caption)
                     .foregroundStyle(.orange)
+            }
+            if let onRemove {
+                Button(role: .destructive) {
+                    onRemove()
+                } label: {
+                    Image(systemName: "minus.circle")
+                }
+                .buttonStyle(.borderless)
+                .help("Remove Custom Root")
             }
         }
     }
