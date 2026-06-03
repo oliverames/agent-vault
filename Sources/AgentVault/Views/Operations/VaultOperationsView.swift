@@ -56,11 +56,13 @@ struct VaultOperationsView: View {
                         } label: {
                             Label("Visible", systemImage: "line.3.horizontal.decrease.circle")
                         }
+                        .buttonStyle(.bordered)
                         Button {
                             cleanExport(artifacts: store.artifacts, label: "Full Clean Export")
                         } label: {
                             Label("All", systemImage: "tray.full")
                         }
+                        .buttonStyle(.borderedProminent)
                     }
                 }
 
@@ -74,6 +76,7 @@ struct VaultOperationsView: View {
                     } label: {
                         Label("Create Backup", systemImage: "archivebox")
                     }
+                    .buttonStyle(.borderedProminent)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -82,20 +85,23 @@ struct VaultOperationsView: View {
                 operationGroup(
                     title: "Restore",
                     symbol: "arrow.uturn.backward.circle",
-                    detail: "Restore from `Manifest.json`; conflicts are skipped unless confirmed."
+                    detail: "Restore from Manifest.json. Existing files are skipped unless overwrite is confirmed."
                 ) {
                     HStack {
                         Button {
                             restoreBackup(overwriteExisting: false)
                         } label: {
-                            Label("Missing", systemImage: "arrow.down.doc")
+                            Label("Restore Missing", systemImage: "arrow.down.doc")
                         }
+                        .buttonStyle(.borderedProminent)
                         Button(role: .destructive) {
                             guard confirmOverwriteRestore() else { return }
                             restoreBackup(overwriteExisting: true)
                         } label: {
-                            Label("Overwrite", systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
+                            Label("Restore & Overwrite", systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
                         }
+                        .buttonStyle(.bordered)
+                        .tint(.red)
                     }
                 }
 
@@ -110,16 +116,17 @@ struct VaultOperationsView: View {
                         } label: {
                             Label("Export", systemImage: "square.and.arrow.up")
                         }
+                        .buttonStyle(.bordered)
                         Button {
                             reconcileMemories()
                         } label: {
                             Label("Reconcile", systemImage: "arrow.triangle.merge")
                         }
+                        .buttonStyle(.borderedProminent)
                     }
                 }
             }
         }
-        .buttonStyle(.glass)
         .disabled(isRunning || store.artifacts.isEmpty)
     }
 
@@ -259,7 +266,6 @@ struct VaultOperationsView: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = []
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
         return url.lastPathComponent == "Manifest.json" ? url : url
     }

@@ -21,7 +21,7 @@ struct SettingsView: View {
             Text("Scan Roots")
                 .font(.title2.bold())
 
-            Text("These directories are walked when Agent Vault scans for artifacts. Canonical roots are always scanned. Cache and marketplace roots are noisier and opt-in.")
+            Text("These directories are walked when Agent Vault scans for artifacts. Canonical roots are always scanned. Cache, marketplace, and bundled Hermes roots are noisier and opt-in.")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -97,7 +97,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Agent Vault").font(.largeTitle.bold())
             Text("Version 1.0.0-beta.2").foregroundStyle(.secondary)
-            Text("A unified inventory of skills, MCPs, plugins, marketplaces, config files, instruction files, work logs, remember buffers, and memory stores across Claude Code, Codex, and Antigravity on your Mac.")
+            Text("A unified inventory of skills, MCPs, plugins, marketplaces, config files, instruction files, work logs, remember buffers, and memory stores across Claude Code, Codex, Antigravity, and Hermes on your Mac.")
                 .fixedSize(horizontal: false, vertical: true)
             Spacer()
         }

@@ -16,18 +16,21 @@ struct CapabilityMatrixView: View {
             if rows.isEmpty {
                 emptyState
             } else {
-                CapabilityMatrixColumnHeader()
-                    .frame(minWidth: 760)
-                    .background(Color.primary.opacity(0.035))
-                ScrollView([.vertical, .horizontal]) {
+                ScrollView(.horizontal) {
                     VStack(spacing: 0) {
-                        ForEach(rows) { row in
-                            CapabilityMatrixRow(row: row) {
-                                store.selectedArtifactID = row.preferredArtifact?.id
+                        CapabilityMatrixColumnHeader()
+                            .background(Color.primary.opacity(0.035))
+                        ScrollView(.vertical) {
+                            VStack(spacing: 0) {
+                                ForEach(rows) { row in
+                                    CapabilityMatrixRow(row: row) {
+                                        store.selectedArtifactID = row.preferredArtifact?.id
+                                    }
+                                }
                             }
                         }
                     }
-                    .frame(minWidth: 760)
+                    .frame(width: CapabilityMatrixLayout.contentWidth)
                 }
             }
         }
@@ -122,6 +125,24 @@ struct CapabilityMatrixView: View {
     }
 }
 
+private enum CapabilityMatrixLayout {
+    static let capabilityWidth: CGFloat = 245
+    static let typeWidth: CGFloat = 58
+    static let sourceWidth: CGFloat = 76
+    static let statusWidth: CGFloat = 72
+    static let itemSpacing: CGFloat = 12
+    static let horizontalPadding: CGFloat = 16
+
+    static var contentWidth: CGFloat {
+        capabilityWidth
+            + typeWidth
+            + statusWidth
+            + (sourceWidth * CGFloat(ArtifactSource.allCases.count))
+            + (itemSpacing * CGFloat(ArtifactSource.allCases.count + 2))
+            + (horizontalPadding * 2)
+    }
+}
+
 private struct CapabilityMatrixEntry: Identifiable {
     let category: ArtifactCategory
     let artifacts: [Artifact]
@@ -164,22 +185,22 @@ private struct CapabilityMatrixEntry: Identifiable {
 
 private struct CapabilityMatrixColumnHeader: View {
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: CapabilityMatrixLayout.itemSpacing) {
             Text("Capability")
-                .frame(width: 245, alignment: .leading)
+                .frame(width: CapabilityMatrixLayout.capabilityWidth, alignment: .leading)
             Text("Type")
-                .frame(width: 58, alignment: .leading)
+                .frame(width: CapabilityMatrixLayout.typeWidth, alignment: .leading)
             ForEach(ArtifactSource.allCases) { source in
                 Text(source.rawValue)
                     .lineLimit(1)
-                    .frame(width: 76)
+                    .frame(width: CapabilityMatrixLayout.sourceWidth)
             }
             Text("Status")
-                .frame(width: 72, alignment: .leading)
+                .frame(width: CapabilityMatrixLayout.statusWidth, alignment: .leading)
         }
         .font(.caption.weight(.semibold))
         .foregroundStyle(.primary)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, CapabilityMatrixLayout.horizontalPadding)
         .padding(.vertical, 8)
     }
 }
@@ -190,21 +211,21 @@ private struct CapabilityMatrixRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
+            HStack(spacing: CapabilityMatrixLayout.itemSpacing) {
                 capabilityCell
-                    .frame(width: 245, alignment: .leading)
+                    .frame(width: CapabilityMatrixLayout.capabilityWidth, alignment: .leading)
                 Text(row.category.displayName.dropTrailingPlural)
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                    .frame(width: 58, alignment: .leading)
+                    .frame(width: CapabilityMatrixLayout.typeWidth, alignment: .leading)
                 ForEach(ArtifactSource.allCases) { source in
                     SourceCoverageCell(artifacts: row.artifacts(for: source))
-                        .frame(width: 76)
+                        .frame(width: CapabilityMatrixLayout.sourceWidth)
                 }
                 statusCell
-                    .frame(width: 72, alignment: .leading)
+                    .frame(width: CapabilityMatrixLayout.statusWidth, alignment: .leading)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, CapabilityMatrixLayout.horizontalPadding)
             .padding(.vertical, 9)
             .contentShape(Rectangle())
         }
