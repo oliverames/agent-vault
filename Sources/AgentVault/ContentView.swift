@@ -3,6 +3,7 @@ import SwiftUI
 private enum VaultViewMode: String, CaseIterable, Identifiable {
     case inventory = "Inventory"
     case coverage = "Coverage"
+    case operations = "Operations"
 
     var id: String { rawValue }
 }
@@ -23,7 +24,7 @@ struct ContentView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 240)
+                .frame(width: 340)
             }
         }
         .overlay(alignment: .top) {
@@ -54,6 +55,13 @@ struct ContentView: View {
                     .navigationSplitViewColumnWidth(min: 520, ideal: 760)
             } detail: {
                 ArtifactDetailView()
+            }
+        case .operations:
+            NavigationSplitView(columnVisibility: $columnVisibility) {
+                SidebarView()
+                    .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 340)
+            } detail: {
+                VaultOperationsView()
             }
         }
     }

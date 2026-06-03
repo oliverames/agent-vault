@@ -24,6 +24,10 @@ struct McpExtractor: Sendable {
                 out.append(contentsOf: parseJSON(at: artifact.url))
             case "config.toml":
                 out.append(contentsOf: parseTOML(at: artifact.url))
+            case "config.yaml", "config.yml":
+                if ArtifactSource.infer(from: artifact.url) == .hermes {
+                    out.append(contentsOf: parseHermesYAML(at: artifact.url))
+                }
             default:
                 continue
             }
@@ -135,6 +139,82 @@ struct McpExtractor: Sendable {
         return out
     }
 
+    // MARK: - YAML (Hermes)
+
+    private func parseHermesYAML(at url: URL) -> [Artifact] {
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard let start = lines.firstIndex(where: { $0 == "mcp_servers:" }) else { return [] }
+
+        let attrs = fileAttributes(for: url)
+        var out: [Artifact] = []
+        var currentName: String?
+        var currentCommand: String?
+        var currentURL: String?
+        var currentArgs: [String] = []
+        var inArgs = false
+
+        func flush() {
+            guard let name = currentName else { return }
+            let subtitle: String
+            if let currentURL, !currentURL.isEmpty {
+                subtitle = currentURL
+            } else if let currentCommand, !currentCommand.isEmpty {
+                let args = currentArgs.joined(separator: " ")
+                subtitle = args.isEmpty ? currentCommand : "\(currentCommand) \(args)"
+            } else {
+                subtitle = "(see config.yaml)"
+            }
+
+            out.append(Artifact(
+                id: virtualID(configURL: url, serverName: name),
+                url: url,
+                category: .mcp,
+                source: .hermes,
+                isCustom: false,
+                title: name,
+                subtitle: subtitle,
+                modifiedAt: attrs.modified,
+                sizeBytes: attrs.size,
+                tags: ["mcp", "hermes", url.lastPathComponent]
+            ))
+        }
+
+        for line in lines.dropFirst(start + 1) {
+            if !line.hasPrefix(" ") && !line.trimmingCharacters(in: .whitespaces).isEmpty {
+                break
+            }
+
+            if line.hasPrefix("  "), !line.hasPrefix("    "), line.trimmingCharacters(in: .whitespaces).hasSuffix(":") {
+                flush()
+                currentName = String(line.trimmingCharacters(in: .whitespaces).dropLast())
+                currentCommand = nil
+                currentURL = nil
+                currentArgs = []
+                inArgs = false
+                continue
+            }
+
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("command:") {
+                currentCommand = yamlScalar(afterColonIn: trimmed)
+                inArgs = false
+            } else if trimmed.hasPrefix("url:") {
+                currentURL = yamlScalar(afterColonIn: trimmed)
+                inArgs = false
+            } else if trimmed == "args:" {
+                inArgs = true
+            } else if inArgs, trimmed.hasPrefix("- ") {
+                currentArgs.append(cleanYAMLScalar(String(trimmed.dropFirst(2))))
+            } else if !trimmed.isEmpty, !trimmed.hasPrefix("- ") {
+                inArgs = false
+            }
+        }
+        flush()
+
+        return out
+    }
+
     // MARK: - Helpers
 
     private func source(for url: URL) -> ArtifactSource {
@@ -143,6 +223,7 @@ struct McpExtractor: Sendable {
             return .claudeCode
         }
         if path.contains("/.codex/") || path.contains("/.codex-plugin/") { return .codex }
+        if path.contains("/.hermes/") || path.contains("Application Support/Hermes/") { return .hermes }
         return .other
     }
 
@@ -155,5 +236,19 @@ struct McpExtractor: Sendable {
         let modified = (attrs[.modificationDate] as? Date) ?? .distantPast
         let size = (attrs[.size] as? Int64) ?? 0
         return (modified, size)
+    }
+
+    private func yamlScalar(afterColonIn line: String) -> String {
+        guard let colon = line.firstIndex(of: ":") else { return "" }
+        return cleanYAMLScalar(String(line[line.index(after: colon)...]))
+    }
+
+    private func cleanYAMLScalar(_ raw: String) -> String {
+        var value = raw.trimmingCharacters(in: .whitespaces)
+        if (value.hasPrefix("\"") && value.hasSuffix("\""))
+            || (value.hasPrefix("'") && value.hasSuffix("'")) {
+            value = String(value.dropFirst().dropLast())
+        }
+        return value
     }
 }
