@@ -48,6 +48,12 @@ actor Scanner {
         (".claude", "shell-snapshots"),
         (".claude", "todos"),
         (".claude", "statsig"),
+        (".hermes", "cache"),
+        (".hermes", "image_cache"),
+        (".hermes", "logs"),
+        (".hermes", "sessions"),
+        (".hermes", "sandboxes"),
+        (".hermes", "hermes-agent"),
     ]
     /// Path substrings that mean "this is a backup or staging copy".
     /// Anything matching is skipped wholesale.

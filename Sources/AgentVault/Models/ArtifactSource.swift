@@ -6,6 +6,7 @@ enum ArtifactSource: String, CaseIterable, Identifiable, Sendable, Hashable {
     case claudeCode = "Claude Code"
     case codex = "Codex"
     case antigravity = "Antigravity"
+    case hermes = "Hermes"
     case other = "Other"
 
     var id: String { rawValue }
@@ -15,6 +16,7 @@ enum ArtifactSource: String, CaseIterable, Identifiable, Sendable, Hashable {
         case .claudeCode: "c.square"
         case .codex: "chevron.left.forwardslash.chevron.right"
         case .antigravity: "a.square"
+        case .hermes: "h.square"
         case .other: "ellipsis.circle"
         }
     }
@@ -35,6 +37,9 @@ enum ArtifactSource: String, CaseIterable, Identifiable, Sendable, Hashable {
         }
         if path.contains("/.antigravity/") {
             return .antigravity
+        }
+        if path.contains("/.hermes/") || path.contains("/Library/Application Support/Hermes/") {
+            return .hermes
         }
         // Project-authored content — Claude Code is the primary consumer of
         // CLAUDE.md and SKILL.md, so attribute to Claude Code unless an

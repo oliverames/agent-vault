@@ -24,7 +24,13 @@ struct MetadataExtractor: Sendable {
 
     /// Parse a plugin.json for top-level metadata fields.
     func pluginMetadata(at url: URL, marketplace: String?, isBundled: Bool) -> ArtifactMetadata {
-        guard let dict = jsonObject(at: url) else { return .empty }
+        let dict: [String: Any]
+        if url.pathExtension.lowercased() == "yaml" || url.pathExtension.lowercased() == "yml" {
+            dict = yamlObject(at: url)
+        } else {
+            guard let json = jsonObject(at: url) else { return .empty }
+            dict = json
+        }
         let author = (dict["author"] as? String)
             ?? ((dict["author"] as? [String: Any])?["name"] as? String)
         let repoString = (dict["repository"] as? String)
@@ -101,11 +107,42 @@ struct MetadataExtractor: Sendable {
         return out
     }
 
+    private func parseTopLevelYAML(at url: URL) -> [String: String] {
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [:] }
+        var out: [String: String] = [:]
+
+        for rawLine in text.split(separator: "\n") {
+            let line = String(rawLine)
+            guard !line.isEmpty,
+                  !line.hasPrefix(" "),
+                  !line.hasPrefix("\t"),
+                  !line.hasPrefix("#"),
+                  let colon = line.firstIndex(of: ":")
+            else { continue }
+
+            let key = String(line[..<colon]).trimmingCharacters(in: .whitespaces)
+            var value = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+            if (value.hasPrefix("\"") && value.hasSuffix("\""))
+                || (value.hasPrefix("'") && value.hasSuffix("'")) {
+                value = String(value.dropFirst().dropLast())
+            }
+            if !key.isEmpty, !value.isEmpty {
+                out[key.lowercased()] = value
+            }
+        }
+
+        return out
+    }
+
     // MARK: - JSON helper
 
     private func jsonObject(at url: URL) -> [String: Any]? {
         guard let data = try? Data(contentsOf: url) else { return nil }
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    }
+
+    private func yamlObject(at url: URL) -> [String: Any] {
+        parseTopLevelYAML(at: url)
     }
 
     // MARK: - "Installed into" detection
@@ -132,6 +169,12 @@ struct MetadataExtractor: Sendable {
         if fm.fileExists(atPath: codexPath.path(percentEncoded: false)) {
             out.append(.codex)
         }
+        let hermesPath = home
+            .appending(path: ".hermes/plugins")
+            .appending(path: marketplaceName)
+        if fm.fileExists(atPath: hermesPath.path(percentEncoded: false)) {
+            out.append(.hermes)
+        }
         return out
     }
 }
@@ -153,6 +196,7 @@ extension MetadataExtractor {
             || path.contains("/.local/share/codex/")
             || path.contains("/.codex/skills/")
             || path.contains("/.codex/vendor_imports/")
+            || path.contains("/.hermes/hermes-agent/")
             || path.contains("/Library/Application Support/Claude/Claude Extensions/")
     }
 }
