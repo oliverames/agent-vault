@@ -1,5 +1,17 @@
 # Agent Vault — Worklog
 
+## 2026-06-04 - Hermes, export, restore, and release UI pass
+
+**What changed**: Added Hermes-aware inventory coverage for skills, MCPs, plugin manifests, config files, and memory directories. Added the Operations surface for clean human-readable exports, manifest-backed backups, restore flows, memory export, and non-destructive memory reconcile drafts. Polished the release UI so Coverage uses a two-column split with an aligned scrollable matrix, Operations buttons have clearer labels and affordance, and Settings/About copy names Hermes.
+
+**Decisions made**: Clean export remains separate from backup/restore: clean export writes readable folders plus README-style context, while backup/restore preserves original paths through a manifest. Memory reconcile writes a draft rather than mutating memory files automatically.
+
+**Left off at**: `main` is pushed through `5a91ced` with a clean working tree. Verification passed with `swift test`, `./script/build_and_run.sh --verify`, and a live Computer Use pass over Inventory, Hermes source counts, Operations, Coverage search/layout, and Settings/About.
+
+**Open questions**: None for the shipped release pass. Future work can still revisit writable coverage/config sync once source precedence is modeled.
+
+---
+
 ## 2026-05-22 — 1.0.0-beta.2 release pass
 
 - Raised app metadata to `1.0.0-beta.2` / build `102`.
