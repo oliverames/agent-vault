@@ -9,13 +9,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
 CONFIG="${CONFIG:-release}"
+ARCH="${ARCH:-arm64}"
+SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"
 
 cd "$ROOT"
 
-echo "==> swift build -c $CONFIG"
-swift build -c "$CONFIG" --arch arm64
+echo "==> swift build -c $CONFIG --arch $ARCH"
+swift build -c "$CONFIG" --arch "$ARCH"
 
-BIN_PATH="$(swift build -c "$CONFIG" --arch arm64 --show-bin-path)"
+BIN_PATH="$(swift build -c "$CONFIG" --arch "$ARCH" --show-bin-path)"
 APP_DIR="${APP_DIR:-$ROOT/build/AgentVault.app}"
 
 echo "==> Assembling $APP_DIR"
@@ -46,8 +48,28 @@ done
 # rejects inside app bundles. Strip them before signing.
 xattr -cr "$APP_DIR" >/dev/null 2>&1 || true
 
-# Ad-hoc sign so Gatekeeper / TCC has a stable code identity for this build
-codesign --force --sign - --entitlements "$ROOT/AppResources/AgentVault.entitlements" --options runtime "$APP_DIR" >/dev/null 2>&1 || \
-  codesign --force --sign - "$APP_DIR" >/dev/null 2>&1 || true
+# Local builds use an ad-hoc signature so TCC sees a stable identity. Release
+# automation can supply a Developer ID identity through SIGNING_IDENTITY.
+if [ "$SIGNING_IDENTITY" = "-" ]; then
+  echo "==> Ad-hoc signing $APP_DIR"
+  codesign \
+    --force \
+    --sign - \
+    --entitlements "$ROOT/AppResources/AgentVault.entitlements" \
+    --options runtime \
+    --timestamp=none \
+    "$APP_DIR"
+else
+  echo "==> Developer ID signing $APP_DIR"
+  codesign \
+    --force \
+    --sign "$SIGNING_IDENTITY" \
+    --entitlements "$ROOT/AppResources/AgentVault.entitlements" \
+    --options runtime \
+    --timestamp \
+    "$APP_DIR"
+fi
+
+codesign --verify --deep --strict --verbose=2 "$APP_DIR"
 
 echo "==> Done: $APP_DIR"

@@ -265,7 +265,7 @@ struct ArtifactClassifier: Sendable {
     }
 
     /// Convert a Claude project slug like
-    /// `-Users-oliverames-Developer-Projects-ames-plugins` into a friendly
+    /// `-Users-example-Developer-Projects-example-plugins` into a friendly
     /// label.
     private func friendlySlug(_ slug: String) -> String {
         guard slug.hasPrefix("-") else { return slug }

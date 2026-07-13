@@ -1,5 +1,13 @@
 # Agent Vault — Worklog
 
+## 2026-07-13 - beta 3 release hardening
+
+**What changed**: Prepared `1.0.0-beta.3` with macOS 26 CI, externally supplied Developer ID signing and notarization automation, independent archive verification, and public privacy, security, contribution, threat-model, and release documentation. Clean Export now applies best-effort secret redaction, while restore rejects stored paths that leave the selected backup or pass through a symbolic link.
+
+**Verification**: Added scanner, export symlink, secret redaction, and restore path tests. The full Swift Testing suite passes with 25 tests across seven suites. Both ad-hoc and local Developer ID archives passed checksum, bundle metadata, arm64 architecture, symlink, and code-signature verification.
+
+**Release boundary**: The repository remains private. A notarized GitHub release still requires the documented repository secrets; no release secrets are currently configured.
+
 ## 2026-06-04 - Hermes, export, restore, and release UI pass
 
 **What changed**: Added Hermes-aware inventory coverage for skills, MCPs, plugin manifests, config files, and memory directories. Added the Operations surface for clean human-readable exports, manifest-backed backups, restore flows, memory export, and non-destructive memory reconcile drafts. Polished the release UI so Coverage uses a two-column split with an aligned scrollable matrix, Operations buttons have clearer labels and affordance, and Settings/About copy names Hermes.

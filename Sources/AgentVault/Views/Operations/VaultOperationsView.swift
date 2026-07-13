@@ -48,7 +48,7 @@ struct VaultOperationsView: View {
                 operationGroup(
                     title: "Clean Export",
                     symbol: "folder.badge.plus",
-                    detail: "Readable folders grouped by source and category."
+                    detail: "Readable folders with common secrets redacted. Review the result before sharing it."
                 ) {
                     HStack {
                         Button {
@@ -69,7 +69,7 @@ struct VaultOperationsView: View {
                 operationGroup(
                     title: "Backup",
                     symbol: "archivebox",
-                    detail: "Manifest-backed copy for restoring original paths."
+                    detail: "Exact, unredacted copies for restoring original paths. Store backups securely."
                 ) {
                     Button {
                         createBackup()
@@ -85,7 +85,7 @@ struct VaultOperationsView: View {
                 operationGroup(
                     title: "Restore",
                     symbol: "arrow.uturn.backward.circle",
-                    detail: "Restore from Manifest.json. Existing files are skipped unless overwrite is confirmed."
+                    detail: "Restore only a backup you trust. Existing files are skipped unless overwrite is confirmed."
                 ) {
                     HStack {
                         Button {
@@ -108,7 +108,7 @@ struct VaultOperationsView: View {
                 operationGroup(
                     title: "Memory",
                     symbol: "brain",
-                    detail: "Export stores or create a non-destructive merged draft."
+                    detail: "Create an unredacted export or a non-destructive merged draft."
                 ) {
                     HStack {
                         Button {

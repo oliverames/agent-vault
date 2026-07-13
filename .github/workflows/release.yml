@@ -1,0 +1,122 @@
+name: Signed release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  sign-notarize-release:
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Validate shell scripts
+        run: bash -n scripts/*.sh script/*.sh
+
+      - name: Run tests
+        run: swift test
+
+      - name: Validate release credentials
+        env:
+          MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          NOTARY_API_KEY_BASE64: ${{ secrets.NOTARY_API_KEY_BASE64 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          required=(
+            MACOS_CERTIFICATE_BASE64
+            MACOS_CERTIFICATE_PASSWORD
+            MACOS_SIGNING_IDENTITY
+            NOTARY_API_KEY_BASE64
+            NOTARY_KEY_ID
+            NOTARY_ISSUER_ID
+          )
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required GitHub Actions secret: $name" >&2
+              exit 2
+            fi
+          done
+
+      - name: Check tag against app version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          app_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' AppResources/Info.plist)"
+          if [ "${GITHUB_REF_NAME#v}" != "$app_version" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match app version $app_version" >&2
+            exit 1
+          fi
+
+      - name: Import Developer ID certificate
+        env:
+          MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/agent-vault-signing.keychain-db"
+          certificate="$RUNNER_TEMP/agent-vault-signing.p12"
+          keychain_password="$(openssl rand -base64 32)"
+          printf '%s' "$MACOS_CERTIFICATE_BASE64" | base64 -D > "$certificate"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" \
+            -k "$keychain" \
+            -P "$MACOS_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$keychain_password" \
+            "$keychain"
+          security list-keychains -d user -s "$keychain"
+
+      - name: Write notarization API key
+        env:
+          NOTARY_API_KEY_BASE64: ${{ secrets.NOTARY_API_KEY_BASE64 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+        run: |
+          key_path="$RUNNER_TEMP/AuthKey_${NOTARY_KEY_ID}.p8"
+          printf '%s' "$NOTARY_API_KEY_BASE64" | base64 -D > "$key_path"
+          chmod 600 "$key_path"
+          echo "NOTARY_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+
+      - name: Build, sign, notarize, and verify
+        env:
+          SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          NOTARIZE: "1"
+          REQUIRE_DISTRIBUTION_SIGNATURE: "1"
+          REQUIRE_NOTARIZED: "1"
+        run: ./scripts/package-release.sh
+
+      - name: Upload signed package
+        uses: actions/upload-artifact@v4
+        with:
+          name: AgentVault-signed-${{ github.ref_name }}
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/*.zip \
+            dist/*.sha256 \
+            --verify-tag \
+            --title "Agent Vault $GITHUB_REF_NAME" \
+            --generate-notes

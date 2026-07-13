@@ -15,8 +15,23 @@ struct VaultRestoreResult: Sendable {
     let detail: String
 }
 
+enum VaultExportError: LocalizedError {
+    case unsupportedManifestVersion(Int)
+    case invalidBackupPath(String)
+
+    var errorDescription: String? {
+        switch self {
+        case let .unsupportedManifestVersion(version):
+            "This backup uses unsupported manifest version \(version)."
+        case let .invalidBackupPath(path):
+            "The backup contains an unsafe stored path: \(path)"
+        }
+    }
+}
+
 struct VaultExportService {
     private let fileManager: FileManager
+    private let redactor = SensitiveValueRedactor()
 
     init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
@@ -53,9 +68,18 @@ struct VaultExportService {
             try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
 
             if isDirectory(sourceURL) {
-                try copyDirectoryContents(from: sourceURL, to: folder, pruningForReadableExport: true)
+                try copyDirectoryContents(
+                    from: sourceURL,
+                    to: folder,
+                    pruningForReadableExport: true,
+                    redactSensitiveValues: true
+                )
             } else {
-                try copyFile(from: sourceURL, to: folder.appending(path: sourceURL.lastPathComponent))
+                try copyFile(
+                    from: sourceURL,
+                    to: folder.appending(path: sourceURL.lastPathComponent),
+                    redactSensitiveValues: true
+                )
             }
 
             copied += 1
@@ -266,13 +290,19 @@ struct VaultExportService {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let manifest = try decoder.decode(VaultBackupManifest.self, from: data)
+        guard manifest.version == 1 else {
+            throw VaultExportError.unsupportedManifestVersion(manifest.version)
+        }
 
         var restored = 0
         var conflicts = 0
         var skipped = 0
 
         for entry in manifest.entries {
-            let storedURL = root.appending(path: entry.storedPath)
+            let storedURL = try validatedStoredURL(in: root, storedPath: entry.storedPath)
+            guard entry.originalPath.hasPrefix("/") else {
+                throw VaultExportError.invalidBackupPath(entry.originalPath)
+            }
             let destinationURL = URL(fileURLWithPath: entry.originalPath, isDirectory: entry.isDirectory)
 
             guard fileManager.fileExists(atPath: storedURL.path(percentEncoded: false)) else {
@@ -339,6 +369,8 @@ struct VaultExportService {
 
         This folder is not a restore backup. It is a readable, grouped copy of the selected Agent Vault artifacts so skills, marketplaces, plugins, MCP configs, instruction files, and memory stores are easy to browse outside the app.
 
+        Agent Vault applied best-effort secret redaction to supported text files. Review the entire export before sharing it because uncommon credentials, personal paths, and sensitive prose may remain.
+
         ## Contents
 
         - Exported items: \(itemCount)
@@ -365,7 +397,7 @@ struct VaultExportService {
 
         Generated: \(formatDate(generatedAt))
 
-        This export copies discovered memory stores by agent. It does not modify live memory files.
+        This export copies discovered memory stores by agent. It does not modify live memory files. The copied content is not redacted and may contain credentials or personal information.
 
         - Exported memory stores: \(itemCount)
         - Skipped memory stores: \(skippedCount)
@@ -389,7 +421,7 @@ struct VaultExportService {
 
         Generated: \(formatDate(generatedAt))
 
-        No live memory files were modified. Agent Vault copied each discovered memory store into `By Agent/` and wrote `MERGED-MEMORY.md` as a review draft.
+        No live memory files were modified. Agent Vault copied each discovered memory store into `By Agent/` and wrote `MERGED-MEMORY.md` as a review draft. The copied content and merged draft are not redacted.
 
         ## Cleanup command status
 
@@ -416,7 +448,7 @@ struct VaultExportService {
 
         Generated: \(formatDate(generatedAt))
 
-        This folder is a restore backup. `Manifest.json` maps every copied item back to its original path.
+        This folder is a restore backup. `Manifest.json` maps every copied item back to its original path. Files are exact, unredacted copies and may contain credentials or personal information.
 
         - Backed up items: \(itemCount)
         - Skipped items: \(skippedCount)
@@ -504,7 +536,12 @@ struct VaultExportService {
         return candidate
     }
 
-    private func copyDirectoryContents(from source: URL, to destination: URL, pruningForReadableExport: Bool) throws {
+    private func copyDirectoryContents(
+        from source: URL,
+        to destination: URL,
+        pruningForReadableExport: Bool,
+        redactSensitiveValues: Bool = false
+    ) throws {
         try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
 
         guard let enumerator = fileManager.enumerator(
@@ -529,16 +566,64 @@ struct VaultExportService {
                 try fileManager.createDirectory(at: target, withIntermediateDirectories: true)
             } else {
                 try fileManager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try copyFile(from: item, to: target)
+                try copyFile(from: item, to: target, redactSensitiveValues: redactSensitiveValues)
             }
         }
     }
 
-    private func copyFile(from source: URL, to destination: URL) throws {
+    private func copyFile(
+        from source: URL,
+        to destination: URL,
+        redactSensitiveValues: Bool = false
+    ) throws {
         if fileManager.fileExists(atPath: destination.path(percentEncoded: false)) {
             try fileManager.removeItem(at: destination)
         }
         try fileManager.copyItem(at: source, to: destination)
+
+        guard redactSensitiveValues,
+              let data = try? Data(contentsOf: destination),
+              data.count <= 5_000_000,
+              !data.contains(0),
+              let sourceText = String(data: data, encoding: .utf8)
+        else { return }
+
+        let redactedText = redactor.redact(sourceText)
+        guard redactedText != sourceText else { return }
+        try Data(redactedText.utf8).write(to: destination)
+    }
+
+    private func validatedStoredURL(in root: URL, storedPath: String) throws -> URL {
+        guard !storedPath.isEmpty, !storedPath.hasPrefix("/") else {
+            throw VaultExportError.invalidBackupPath(storedPath)
+        }
+
+        let components = NSString(string: storedPath).pathComponents
+        guard !components.contains("..") else {
+            throw VaultExportError.invalidBackupPath(storedPath)
+        }
+
+        let canonicalRoot = root.standardizedFileURL
+        let candidate = root.appending(path: storedPath).standardizedFileURL
+        var rootPath = canonicalRoot.path(percentEncoded: false)
+        while rootPath.count > 1, rootPath.hasSuffix("/") {
+            rootPath.removeLast()
+        }
+        let candidatePath = candidate.path(percentEncoded: false)
+        guard candidatePath.hasPrefix(rootPath + "/") else {
+            throw VaultExportError.invalidBackupPath(storedPath)
+        }
+
+        var componentURL = canonicalRoot
+        for component in components {
+            componentURL.append(path: component)
+            let values = try? componentURL.resourceValues(forKeys: [.isSymbolicLinkKey])
+            if values?.isSymbolicLink == true {
+                throw VaultExportError.invalidBackupPath(storedPath)
+            }
+        }
+
+        return candidate
     }
 
     private func isDirectory(_ url: URL) -> Bool {

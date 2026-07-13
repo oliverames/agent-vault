@@ -17,6 +17,11 @@ struct MarkdownPreview: View {
             } else {
                 Markdown(text)
                     .markdownTheme(.gitHub)
+                    // MarkdownUI loads remote images by default. Inventory
+                    // previews must remain local even when a private file
+                    // contains an externally hosted tracking image.
+                    .markdownImageProvider(.asset)
+                    .markdownInlineImageProvider(.asset)
                     .textSelection(.enabled)
                     .padding(.horizontal, 24)
                     .padding(.vertical, 18)
