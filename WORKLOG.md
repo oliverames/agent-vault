@@ -1,5 +1,13 @@
 # Agent Vault — Worklog
 
+## 2026-07-13 - beta 3 release status
+
+**Current state**: The repository is public and `v1.0.0-beta.3` is published as a signed and notarized prerelease. The release contains the app archive and its checksum. GitHub now has all six signing and notarization secrets required by the release workflow, so the missing-secret gate recorded earlier today is closed.
+
+**What remains**: Beta distribution is ready. Before publishing a stable `1.0.0`, decide whether the beta has had enough real-world use, close any release-blocking feedback, and publish a non-prerelease tag with final release notes. There is no remaining signing or repository-visibility blocker.
+
+---
+
 ## 2026-07-13 - beta 3 release hardening
 
 **What changed**: Prepared `1.0.0-beta.3` with macOS 26 CI, externally supplied Developer ID signing and notarization automation, independent archive verification, and public privacy, security, contribution, threat-model, and release documentation. Clean Export now applies best-effort secret redaction, while restore rejects stored paths that leave the selected backup or pass through a symbolic link.
