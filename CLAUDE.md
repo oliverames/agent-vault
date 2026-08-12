@@ -28,38 +28,7 @@ The build script:
 
 ## Layout
 
-```
-Sources/AgentVault/
-├── AgentVaultApp.swift          // @main entry, Scene composition
-├── ContentView.swift            // NavigationSplitView root
-├── Models/
-│   ├── Artifact.swift           // The core record + ArtifactMetadata
-│   ├── ArtifactCategory.swift   // 10 categories (skill, mcp, marketplace, ...)
-│   ├── ArtifactSource.swift     // claudeCode / codex / antigravity / other
-│   ├── ScanRoot.swift           // Configurable scan locations
-│   └── IsCustomHeuristic.swift  // User-authored vs installed detection
-├── Scanning/
-│   ├── Scanner.swift            // actor Scanner; walks roots, applies prunes
-│   ├── ArtifactClassifier.swift // URL → Artifact mapping per category
-│   ├── MetadataExtractor.swift  // Parses YAML frontmatter, plugin.json, marketplace.json
-│   └── McpExtractor.swift       // Pulls MCP entries from settings.json + config.toml
-├── Stores/
-│   ├── VaultStore.swift         // @MainActor @Observable — UI state + scan results
-│   └── FileBuffer.swift         // Editor backing model with mtime conflict detection
-└── Views/
-    ├── Sidebar/SidebarView.swift
-    ├── List/ArtifactListView.swift, ArtifactRowView.swift
-    ├── Detail/
-    │   ├── ArtifactDetailView.swift  // Title + provenance strip + content + footer
-    │   ├── MarkdownPreview.swift     // swift-markdown-ui renderer
-    │   ├── PlainTextPreview.swift    // JSON/TOML/etc. as monospaced text
-    │   ├── DirectoryPreview.swift    // HSplitView for .remember/ and memory/
-    │   ├── EditorView.swift          // In-app editor sheet
-    │   └── SourceEditorView.swift    // AppKit-backed source editor
-    ├── Matrix/CapabilityMatrixView.swift // Read-only cross-runtime coverage matrix
-    ├── PermissionBanner.swift    // TCC-denial deep-link banner
-    └── SettingsView.swift        // ⌘, — scan roots, About
-```
+`Sources/AgentVault/` splits into `Models/`, `Scanning/`, `Stores/`, and `Views/`. Read the directory for the file list; the non-obvious pieces are called out in Conventions below.
 
 ## Conventions
 
