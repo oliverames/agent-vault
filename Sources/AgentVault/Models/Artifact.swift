@@ -29,6 +29,8 @@ struct Artifact: Identifiable, Hashable, Sendable {
     let id: String                 // stable: SHA-friendly path hash
     let url: URL
     let category: ArtifactCategory
+    let sources: [ArtifactSource]
+    /// Primary host retained for export folder compatibility. UI uses all sources.
     let source: ArtifactSource
     let isCustom: Bool             // user-authored vs system/installed
     let title: String              // display name (skill name, project, etc.)
@@ -43,6 +45,7 @@ struct Artifact: Identifiable, Hashable, Sendable {
         url: URL,
         category: ArtifactCategory,
         source: ArtifactSource,
+        sources: [ArtifactSource]? = nil,
         isCustom: Bool,
         title: String,
         subtitle: String? = nil,
@@ -54,7 +57,9 @@ struct Artifact: Identifiable, Hashable, Sendable {
         self.id = id ?? url.path(percentEncoded: false)
         self.url = url
         self.category = category
-        self.source = source
+        let inferred = sources ?? RuntimeAttribution.sources(for: url)
+        self.sources = inferred.isEmpty ? [source] : inferred
+        self.source = self.sources.first ?? source
         self.isCustom = isCustom
         self.title = title
         self.subtitle = subtitle

@@ -148,7 +148,7 @@ final class VaultStore {
         var counts: [ArtifactSource: Int] = [:]
         for artifact in artifacts {
             guard matchesFilters(artifact, includeCategory: true, includeSource: false) else { continue }
-            counts[artifact.source, default: 0] += 1
+            for source in artifact.sources { counts[source, default: 0] += 1 }
         }
         return counts
     }
@@ -262,7 +262,7 @@ final class VaultStore {
         if includeCategory, let selectedCategory, artifact.category != selectedCategory {
             return false
         }
-        if includeSource, let selectedSource, artifact.source != selectedSource {
+        if includeSource, let selectedSource, !artifact.sources.contains(selectedSource) {
             return false
         }
         if showCustomOnly, !artifact.isCustom {

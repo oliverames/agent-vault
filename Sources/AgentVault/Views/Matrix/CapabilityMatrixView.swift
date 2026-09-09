@@ -88,7 +88,7 @@ struct CapabilityMatrixView: View {
     private var rows: [CapabilityMatrixEntry] {
         var artifacts = store.artifacts.filter { $0.category == category }
         if let source = store.selectedSource {
-            artifacts = artifacts.filter { $0.source == source }
+            artifacts = artifacts.filter { $0.sources.contains(source) }
         }
         if store.showCustomOnly {
             artifacts = artifacts.filter(\.isCustom)
@@ -168,7 +168,7 @@ private struct CapabilityMatrixEntry: Identifiable {
     }
 
     var coveredSourceCount: Int {
-        Set(artifacts.map(\.source)).count
+        Set(artifacts.flatMap(\.sources)).count
     }
 
     var preferredArtifact: Artifact? {
@@ -179,7 +179,7 @@ private struct CapabilityMatrixEntry: Identifiable {
     }
 
     func artifacts(for source: ArtifactSource) -> [Artifact] {
-        artifacts.filter { $0.source == source }
+        artifacts.filter { $0.sources.contains(source) }
     }
 }
 

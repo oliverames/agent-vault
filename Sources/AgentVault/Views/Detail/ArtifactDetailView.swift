@@ -210,7 +210,9 @@ struct ArtifactDetailView: View {
             // so labels never wrap or hyphenate.
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 14) {
-                    metaItem(value: artifact.source.rawValue, icon: artifact.source.sfSymbol)
+                    ForEach(artifact.sources) { source in
+                        metaItem(value: source.rawValue, icon: source.sfSymbol)
+                    }
                     metaItem(value: artifact.modifiedFormatted, icon: "clock")
                     metaItem(value: artifact.sizeFormatted, icon: "scalemass")
                     metaItem(

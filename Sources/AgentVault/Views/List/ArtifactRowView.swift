@@ -27,7 +27,9 @@ struct ArtifactRowView: View {
                         .truncationMode(.middle)
                 }
                 HStack(spacing: 6) {
-                    SourceChip(source: artifact.source)
+                    ForEach(artifact.sources) { source in
+                        SourceChip(source: source)
+                    }
                     if let marketplace = artifact.metadata.marketplace,
                        artifact.category != .marketplace {
                         OriginChip(icon: "storefront", text: marketplace)

@@ -215,15 +215,45 @@ actor Scanner {
         return (artifacts, false, count)
     }
 
-    /// Two scan roots can overlap (e.g. ~/Documents and a sub-path within
-    /// it). Dedupe by URL path so each artifact appears once.
+    /// Merge overlapping paths and dual-host manifests in the same marketplace root.
+    /// Names alone never identify a marketplace across separate repositories.
     private func dedupe(_ artifacts: [Artifact]) -> [Artifact] {
-        var seen = Set<String>()
-        var out: [Artifact] = []
-        out.reserveCapacity(artifacts.count)
-        for artifact in artifacts where seen.insert(artifact.id).inserted {
-            out.append(artifact)
+        var grouped: [String: Artifact] = [:]
+        var order: [String] = []
+        let marketplaces = artifacts.filter { $0.category == .marketplace }
+        let references = RuntimeAttribution.localReferences(in: marketplaces)
+        for original in artifacts {
+            let key = original.category == .marketplace
+                ? RuntimeAttribution.marketplaceIdentity(for: original)
+                : original.url.resolvingSymlinksInPath().standardizedFileURL.path
+            let linked = RuntimeAttribution.linkedSources(for: original, references: references)
+            let artifact = Artifact(
+                id: key, url: original.url, category: original.category,
+                source: original.source, sources: linked.isEmpty ? original.sources : linked,
+                isCustom: original.isCustom, title: original.title, subtitle: original.subtitle,
+                modifiedAt: original.modifiedAt, sizeBytes: original.sizeBytes,
+                tags: original.tags, metadata: original.metadata
+            )
+            guard let previous = grouped[key] else {
+                grouped[key] = artifact
+                order.append(key)
+                continue
+            }
+            let sources = ArtifactSource.allCases.filter {
+                $0 != .other && (previous.sources.contains($0) || artifact.sources.contains($0))
+            }
+            var metadata = previous.metadata
+            metadata.installedInto = ArtifactSource.allCases.filter {
+                previous.metadata.installedInto.contains($0) || artifact.metadata.installedInto.contains($0)
+            }
+            grouped[key] = Artifact(
+                id: previous.id, url: previous.url, category: previous.category,
+                source: previous.source, sources: sources.isEmpty ? [.other] : sources,
+                isCustom: previous.isCustom, title: previous.title, subtitle: previous.subtitle,
+                modifiedAt: max(previous.modifiedAt, artifact.modifiedAt), sizeBytes: previous.sizeBytes,
+                tags: previous.tags, metadata: metadata
+            )
         }
-        return out
+        return order.compactMap { grouped[$0] }
     }
 }
