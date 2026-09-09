@@ -82,15 +82,19 @@ actor Scanner {
     ///   pass the cache roots in via `roots` AND list them here so the
     ///   pruner doesn't bail on them. Comparing by `standardizedFileURL`
     ///   handles iCloud `Mobile Documents` symlinks correctly.
-    func scan(roots: [ScanRoot], forceWalk: [URL] = []) async -> ScanResult {
+    func scan(roots: [ScanRoot], forceWalk: [URL] = [], excludedRoots: [URL] = []) async -> ScanResult {
         let start = Date()
         var artifacts: [Artifact] = []
         var denied: [URL] = []
         var visited = 0
         let forced = Set(forceWalk.map { $0.standardizedFileURL.path(percentEncoded: false) })
 
-        for root in roots {
-            let (rootArtifacts, isDenied, count) = scanRoot(root, forceWalkPaths: forced)
+        // Exclude paused subtrees even when an enabled ancestor overlaps them.
+        let excluded = Set((excludedRoots + roots.filter { !$0.isEnabled }.map(\.url))
+            .map { $0.standardizedFileURL.path(percentEncoded: false) })
+
+        for root in roots where root.isEnabled && !isExcluded(root.url, paths: excluded) {
+            let (rootArtifacts, isDenied, count) = scanRoot(root, forceWalkPaths: forced, excludedPaths: excluded)
             artifacts.append(contentsOf: rootArtifacts)
             visited += count
             if isDenied { denied.append(root.url) }
@@ -104,8 +108,13 @@ actor Scanner {
         )
     }
 
+    private func isExcluded(_ url: URL, paths: Set<String>) -> Bool {
+        let path = url.standardizedFileURL.path(percentEncoded: false)
+        return paths.contains { path == $0 || path.hasPrefix($0.hasSuffix("/") ? $0 : $0 + "/") }
+    }
+
     /// Walk a single root. Returns `(artifacts, isDenied, visitedCount)`.
-    private func scanRoot(_ root: ScanRoot, forceWalkPaths: Set<String>) -> ([Artifact], Bool, Int) {
+    private func scanRoot(_ root: ScanRoot, forceWalkPaths: Set<String>, excludedPaths: Set<String>) -> ([Artifact], Bool, Int) {
         let fm = FileManager.default
         let path = root.url.path(percentEncoded: false)
 
@@ -140,6 +149,10 @@ actor Scanner {
         var count = 0
 
         while let item = enumerator.nextObject() as? URL {
+            if isExcluded(item, paths: excludedPaths) {
+                enumerator.skipDescendants()
+                continue
+            }
             count += 1
 
             // Pull resource values in one shot.

@@ -14,13 +14,17 @@ struct ScanRoot: Identifiable, Hashable, Sendable {
     /// can be removed without editing source defaults.
     let isUserAdded: Bool
 
-    init(url: URL, displayName: String, isCanonical: Bool, isUserAdded: Bool = false) {
+    /// Pausing a root preserves its path and other settings.
+    var isEnabled: Bool
+
+    init(url: URL, displayName: String, isCanonical: Bool, isUserAdded: Bool = false, isEnabled: Bool = true) {
         let standardized = url.standardizedFileURL
         self.id = standardized.path(percentEncoded: false)
         self.url = standardized
         self.displayName = displayName
         self.isCanonical = isCanonical
         self.isUserAdded = isUserAdded
+        self.isEnabled = isEnabled
     }
 }
 

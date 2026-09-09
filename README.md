@@ -36,6 +36,8 @@ Clean Export applies best-effort redaction to common secret fields and token for
 | Project instructions | `CLAUDE.md`, `AGENTS.md`, and `WORKLOG.md` |
 | Session and memory data | `.remember` directories plus Claude, Codex, and Hermes memory stores |
 
+Settings includes a persisted switch for each scan root. Turn a root off to skip it and its subdirectories without removing its configuration. Re-enable it to resume scanning. Cache roots still require the separate cache opt-in. Existing roots remain enabled when upgrading.
+
 Agent Vault parses provenance from skill frontmatter and plugin manifests, including author, version, marketplace, plugin, repository, and installed runtime when available. It distinguishes canonical authoring roots from installed caches and skips common build, backup, and staging trees.
 
 ## Requirements
@@ -96,7 +98,6 @@ scripts/                Build, package, and release verification
 
 - Model source and override precedence before allowing cross-runtime configuration changes.
 - Collapse duplicate dual-host marketplace entries.
-- Add root enable and disable controls.
 - Evaluate a local CodeMirror editor without weakening conflict protection.
 
 Agent Vault is available under the [MIT License](LICENSE). It was built by [Oliver Ames](https://ames.consulting).

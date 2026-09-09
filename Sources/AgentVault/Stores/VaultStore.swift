@@ -39,24 +39,33 @@ final class VaultStore {
     private(set) var scanRoots: [ScanRoot]
     private(set) var heuristic: IsCustomHeuristic
     private var customOverrides: [String: Bool] {
-        get { Self.loadOverrides() }
-        set { Self.saveOverrides(newValue); heuristic = IsCustomHeuristic.defaults(overrides: newValue) }
+        get { loadOverrides() }
+        set { saveOverrides(newValue); heuristic = IsCustomHeuristic.defaults(overrides: newValue) }
     }
 
     // MARK: - Workers
 
+    private let preferences: UserDefaults
+    private var scanGeneration = 0
     private let scanner: Scanner
     private let mcpExtractor = McpExtractor()
 
     // MARK: - Init
 
-    init() {
-        let overrides = Self.loadOverrides()
+    init(preferences: UserDefaults = .standard, defaultRoots: [ScanRoot] = ScanRoot.defaults()) {
+        self.preferences = preferences
+        let overrides = preferences.dictionary(forKey: Self.overridesKey) as? [String: Bool] ?? [:]
         let heuristic = IsCustomHeuristic.defaults(overrides: overrides)
-        self.scanRoots = Self.mergedRoots(
-            defaults: ScanRoot.defaults(),
-            customPaths: Self.loadCustomRootPaths()
+        let roots = Self.mergedRoots(
+            defaults: defaultRoots,
+            customPaths: preferences.stringArray(forKey: Self.customRootsKey) ?? []
         )
+        let enabledStates = preferences.dictionary(forKey: Self.rootEnabledKey) as? [String: Bool] ?? [:]
+        self.scanRoots = roots.map { root in
+            var root = root
+            root.isEnabled = enabledStates[root.id] ?? root.isEnabled
+            return root
+        }
         self.heuristic = heuristic
         self.scanner = Scanner(classifier: ArtifactClassifier(heuristic: heuristic))
     }
@@ -65,12 +74,15 @@ final class VaultStore {
 
     /// Run a fresh scan over the active roots.
     func rescan() async {
+        scanGeneration += 1
+        let generation = scanGeneration
         phase = .scanning
-        let activeRoots = scanRoots.filter { $0.isCanonical || showCached }
+        let activeRoots = scanRoots.filter { $0.isEnabled && ($0.isCanonical || showCached) }
+        let excludedRoots = scanRoots.filter { !$0.isEnabled }.map(\.url)
         // When caches are opted in, list them as forceWalk so the parent-child
         // pruner doesn't skip them when they're the explicit target root.
         let forceWalk = showCached
-            ? scanRoots.filter { !$0.isCanonical }.map(\.url)
+            ? activeRoots.filter { !$0.isCanonical }.map(\.url)
             : []
         let forcedPaths = Set(forceWalk.map { $0.standardizedFileURL.path(percentEncoded: false) })
         let startedAt = Date()
@@ -86,7 +98,8 @@ final class VaultStore {
         for root in activeRoots {
             let rootPath = root.url.standardizedFileURL.path(percentEncoded: false)
             let rootForceWalk = forcedPaths.contains(rootPath) ? [root.url] : []
-            let result = await scanner.scan(roots: [root], forceWalk: rootForceWalk)
+            let result = await scanner.scan(roots: [root], forceWalk: rootForceWalk, excludedRoots: excludedRoots)
+            guard generation == scanGeneration else { return }
 
             scannedArtifacts.append(contentsOf: result.artifacts)
             denied.append(contentsOf: result.deniedRoots)
@@ -206,6 +219,16 @@ final class VaultStore {
         return out
     }
 
+    func setScanRootEnabled(_ root: ScanRoot, isEnabled: Bool) {
+        guard let index = scanRoots.firstIndex(where: { $0.id == root.id }),
+              scanRoots[index].isEnabled != isEnabled else { return }
+        scanRoots[index].isEnabled = isEnabled
+        var states = preferences.dictionary(forKey: Self.rootEnabledKey) as? [String: Bool] ?? [:]
+        states[root.id] = isEnabled
+        preferences.set(states, forKey: Self.rootEnabledKey)
+        Task { await rescan() }
+    }
+
     // MARK: - Custom scan roots
 
     @discardableResult
@@ -222,6 +245,9 @@ final class VaultStore {
     func removeCustomScanRoot(_ root: ScanRoot) {
         guard root.isUserAdded else { return }
         scanRoots.removeAll { $0.id == root.id && $0.isUserAdded }
+        var states = preferences.dictionary(forKey: Self.rootEnabledKey) as? [String: Bool] ?? [:]
+        states.removeValue(forKey: root.id)
+        preferences.set(states, forKey: Self.rootEnabledKey)
         saveCustomRootsFromState()
         Task { await rescan() }
     }
@@ -262,23 +288,16 @@ final class VaultStore {
 
     // MARK: - UserDefaults
 
+    private static let rootEnabledKey = "com.oliverames.AgentVault.scanRootEnabled"
     private static let overridesKey = "com.oliverames.AgentVault.customOverrides"
     private static let customRootsKey = "com.oliverames.AgentVault.customScanRoots"
 
-    private static func loadOverrides() -> [String: Bool] {
-        UserDefaults.standard.dictionary(forKey: overridesKey) as? [String: Bool] ?? [:]
+    private func loadOverrides() -> [String: Bool] {
+        preferences.dictionary(forKey: Self.overridesKey) as? [String: Bool] ?? [:]
     }
 
-    private static func saveOverrides(_ value: [String: Bool]) {
-        UserDefaults.standard.set(value, forKey: overridesKey)
-    }
-
-    private static func loadCustomRootPaths() -> [String] {
-        UserDefaults.standard.stringArray(forKey: customRootsKey) ?? []
-    }
-
-    private static func saveCustomRootPaths(_ value: [String]) {
-        UserDefaults.standard.set(value, forKey: customRootsKey)
+    private func saveOverrides(_ value: [String: Bool]) {
+        preferences.set(value, forKey: Self.overridesKey)
     }
 
     private static func mergedRoots(defaults: [ScanRoot], customPaths: [String]) -> [ScanRoot] {
@@ -318,6 +337,6 @@ final class VaultStore {
         let paths = scanRoots
             .filter(\.isUserAdded)
             .map { $0.url.path(percentEncoded: false) }
-        Self.saveCustomRootPaths(paths)
+        preferences.set(paths, forKey: Self.customRootsKey)
     }
 }

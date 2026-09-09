@@ -21,7 +21,7 @@ struct SettingsView: View {
             Text("Scan Roots")
                 .font(.title2.bold())
 
-            Text("These directories are walked when Agent Vault scans for artifacts. Canonical roots are always scanned. Cache, marketplace, and bundled Hermes roots are noisier and opt-in.")
+            Text("These directories are walked when Agent Vault scans for artifacts. Turn off a root to pause scanning it and its subdirectories without removing it. Cache, marketplace, and bundled Hermes roots also require the opt-in below.")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -29,7 +29,7 @@ struct SettingsView: View {
             List {
                 Section("Canonical") {
                     ForEach(store.scanRoots.filter { $0.isCanonical && !$0.isUserAdded }) { root in
-                        ScanRootRow(root: root)
+                        ScanRootRow(root: root, isEnabled: enabledBinding(for: root))
                     }
                 }
                 Section {
@@ -39,7 +39,7 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(customRoots) { root in
-                            ScanRootRow(root: root) {
+                            ScanRootRow(root: root, isEnabled: enabledBinding(for: root)) {
                                 store.removeCustomScanRoot(root)
                             }
                         }
@@ -60,7 +60,7 @@ struct SettingsView: View {
                 }
                 Section("Caches & Marketplaces (opt-in)") {
                     ForEach(store.scanRoots.filter { !$0.isCanonical }) { root in
-                        ScanRootRow(root: root)
+                        ScanRootRow(root: root, isEnabled: enabledBinding(for: root))
                     }
                 }
             }
@@ -104,6 +104,13 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private func enabledBinding(for root: ScanRoot) -> Binding<Bool> {
+        Binding(
+            get: { store.scanRoots.first { $0.id == root.id }?.isEnabled ?? false },
+            set: { store.setScanRootEnabled(root, isEnabled: $0) }
+        )
+    }
+
     private func addCustomRoot() {
         let panel = NSOpenPanel()
         panel.title = "Add Scan Root"
@@ -117,13 +124,14 @@ struct SettingsView: View {
         if store.addCustomScanRoot(url) {
             rootError = nil
         } else {
-            rootError = "That root is already being scanned."
+            rootError = "That root is already in the list."
         }
     }
 }
 
 private struct ScanRootRow: View {
     let root: ScanRoot
+    @Binding var isEnabled: Bool
     var onRemove: (() -> Void)? = nil
 
     var body: some View {
@@ -144,6 +152,10 @@ private struct ScanRootRow: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
+            Toggle("Scan \(root.displayName)", isOn: $isEnabled)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .help(isEnabled ? "Pause scanning this root" : "Enable scanning this root")
             if let onRemove {
                 Button(role: .destructive) {
                     onRemove()
