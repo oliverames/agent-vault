@@ -1,5 +1,17 @@
 # Agent Vault — Worklog
 
+## 2026-10-07 - GitHub Issue Review Closeout
+
+**What changed**: Reviewed all 2 open issues against source at `f6043b03c89a` and their complete issue history. No issue qualified for closure.
+
+**Decisions made**: Close completed implementations even when device acceptance remains, and close testing-only tasks under Oliver's explicit instruction. Keep unresolved defects, missing implementation, release work, and owner decisions open.
+
+**Left off at**: Resolved this session: issue assignment and state reconciliation. GitHub was independently re-read on October 7, 2026 at 10:20 AM EDT. All 5 repository issues include Oliver as an assignee, with 2 open. Source paths and cited lines were checked. No runtime tests, deployment, or application changes were performed. This is one part of the account-wide review.
+
+**Open questions**: Still open: [#4](https://github.com/oliverames/agent-vault/issues/4), [#5](https://github.com/oliverames/agent-vault/issues/5). Other previously recorded operational follow-ups retain their dated status. No new issue was needed for this review.
+
+---
+
 ## 2026-07-13 - beta 3 release status
 
 **Current state**: The repository is public and `v1.0.0-beta.3` is published as a signed and notarized prerelease. The release contains the app archive and its checksum. GitHub now has all six signing and notarization secrets required by the release workflow, so the missing-secret gate recorded earlier today is closed.
