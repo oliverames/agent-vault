@@ -59,7 +59,7 @@ extension IsCustomHeuristic {
 
         return IsCustomHeuristic(
             authoringRoots: [
-                projects.appending(path: "ames-plugins"),
+                home.appending(path: "Developer/Projects/personal-plugins"),
                 projects.appending(path: "ames-connectors"),
                 projects, // any other repo under Developer/Projects
             ],

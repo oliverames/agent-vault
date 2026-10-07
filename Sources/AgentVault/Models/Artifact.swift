@@ -4,7 +4,7 @@ import Foundation
 struct ArtifactMetadata: Hashable, Sendable {
     var author: String?
     var version: String?
-    /// The marketplace this artifact belongs to (e.g. "ames-plugins").
+    /// The marketplace this artifact belongs to (e.g. "personal-plugins").
     var marketplace: String?
     /// Plugin name when the artifact is inside one (e.g. for a skill).
     var plugin: String?

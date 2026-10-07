@@ -240,8 +240,8 @@ struct ArtifactClassifier: Sendable {
     /// Returns the marketplace name enclosing an artifact. The marketplace
     /// is the directory directly above the innermost `plugins/` segment.
     /// Examples:
-    ///   `~/Developer/Projects/ames-plugins/plugins/X/...` → "ames-plugins"
-    ///   `~/.claude/plugins/marketplaces/ames-plugins/plugins/X/...` → "ames-plugins"
+    ///   `~/Developer/Projects/personal-plugins/plugins/X/...` → "personal-plugins"
+    ///   `~/.claude/plugins/marketplaces/personal-plugins/plugins/X/...` → "personal-plugins"
     /// Using `lastIndex(of: "plugins")` handles both: in the second case it
     /// matches the inner `plugins/` (after the marketplace name), not the
     /// outer `plugins/marketplaces` directory.
