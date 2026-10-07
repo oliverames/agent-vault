@@ -1,5 +1,17 @@
 # Agent Vault — Worklog
 
+## 2026-10-07 - Personal Plugins Migration Closeout
+
+**What changed**: Commit `7ac5126` updates AgentVault's authoring root to `~/Developer/Projects/personal-plugins` and updates marketplace examples. The related marketplace repository is `oliverames/personal-plugins`.
+
+**Decisions made**: Treat the canonical source checkout as authored content, keep installed plugin caches excluded, and preserve explicit classification overrides.
+
+**Left off at**: The migration's isolated classification check passed for the canonical source, installed cache exclusion, and an explicit override. During wrap-up, the source diff and current paths were checked again, and local `main` matched GitHub. No app build or release ran during this closeout.
+
+**Open questions**: The source-path migration is resolved. Existing issues [#4](https://github.com/oliverames/agent-vault/issues/4) and [#5](https://github.com/oliverames/agent-vault/issues/5) remain open, as verified on October 7. Earlier operational follow-ups retain their dated status.
+
+---
+
 ## 2026-10-07 - GitHub Issue Review Closeout
 
 **What changed**: Reviewed all 2 open issues against source at `f6043b03c89a` and their complete issue history. No issue qualified for closure.
