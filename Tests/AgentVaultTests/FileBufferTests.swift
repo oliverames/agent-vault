@@ -43,6 +43,78 @@ struct FileBufferTests {
         #expect(try String(contentsOf: url, encoding: .utf8) == "two")
     }
 
+    @Test("save detects an external edit within one second of the read")
+    func saveDetectsSubsecondExternalModification() throws {
+        let url = try temporaryFile(contents: "one")
+        let buffer = FileBuffer(url: url)
+        buffer.load()
+        let readMtime = try #require(buffer.mtimeAtRead)
+
+        buffer.text = "two"
+        try "external edit".write(to: url, atomically: true, encoding: .utf8)
+        try setModificationDate(readMtime.addingTimeInterval(0.4), of: url)
+
+        #expect(isConflict(buffer.save()))
+        #expect(try String(contentsOf: url, encoding: .utf8) == "external edit")
+    }
+
+    @Test("save detects a same-size replacement that keeps the read timestamp")
+    func saveDetectsSameTimestampReplacement() throws {
+        let url = try temporaryFile(contents: "one")
+        let buffer = FileBuffer(url: url)
+        buffer.load()
+        let readMtime = try #require(buffer.mtimeAtRead)
+
+        buffer.text = "two"
+        try "uno".write(to: url, atomically: true, encoding: .utf8)
+        try setModificationDate(readMtime, of: url)
+
+        #expect(isConflict(buffer.save()))
+        #expect(try String(contentsOf: url, encoding: .utf8) == "uno")
+    }
+
+    @Test("save accepts an unchanged file and consecutive saves")
+    func saveAcceptsUnchangedFile() throws {
+        let url = try temporaryFile(contents: "one")
+        let buffer = FileBuffer(url: url)
+        buffer.load()
+
+        buffer.text = "two"
+        #expect(buffer.save() == .saved)
+        buffer.text = "three"
+        #expect(buffer.save() == .saved)
+        #expect(try String(contentsOf: url, encoding: .utf8) == "three")
+    }
+
+    @Test("force save overwrites a conflicting external edit")
+    func forceSaveOverwritesConflict() throws {
+        let url = try temporaryFile(contents: "one")
+        let buffer = FileBuffer(url: url)
+        buffer.load()
+        let readMtime = try #require(buffer.mtimeAtRead)
+
+        buffer.text = "two"
+        try "external edit".write(to: url, atomically: true, encoding: .utf8)
+        try setModificationDate(readMtime.addingTimeInterval(0.4), of: url)
+
+        #expect(isConflict(buffer.save()))
+        #expect(buffer.save(force: true) == .saved)
+        #expect(try String(contentsOf: url, encoding: .utf8) == "two")
+        #expect(buffer.save() == .saved)
+    }
+
+    private func isConflict(_ outcome: FileBuffer.SaveOutcome) -> Bool {
+        if case .conflict = outcome { return true }
+        return false
+    }
+
+    private func setModificationDate(_ date: Date, of url: URL) throws {
+        try FileManager.default.setAttributes(
+            [.modificationDate: date],
+            ofItemAtPath: url.path(percentEncoded: false)
+        )
+    }
+
     private func temporaryFile(contents: String) throws -> URL {
         let directory = URL(fileURLWithPath: NSTemporaryDirectory())
             .appending(path: "AgentVaultTests-\(UUID().uuidString)", directoryHint: .isDirectory)
