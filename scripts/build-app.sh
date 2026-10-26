@@ -29,8 +29,27 @@ mkdir -p "$APP_DIR/Contents/Resources"
 cp "$BIN_PATH/AgentVault" "$APP_DIR/Contents/MacOS/AgentVault"
 chmod +x "$APP_DIR/Contents/MacOS/AgentVault"
 
+# Debug symbols for Sentry symbolication, from the object files the build
+# left in .build. Only when DSYM_PATH is set (scripts/package-release.sh).
+if [ -n "${DSYM_PATH:-}" ]; then
+  rm -rf "$DSYM_PATH"
+  dsymutil "$APP_DIR/Contents/MacOS/AgentVault" -o "$DSYM_PATH"
+  if [ "$(dwarfdump --uuid "$APP_DIR/Contents/MacOS/AgentVault" | awk '{print $2}' | sort)" != \
+       "$(dwarfdump --uuid "$DSYM_PATH" | awk '{print $2}' | sort)" ]; then
+    echo "dSYM UUIDs do not match the app binary" >&2
+    exit 1
+  fi
+fi
+
 # Info.plist
 cp "$ROOT/AppResources/Info.plist" "$APP_DIR/Contents/Info.plist"
+
+# Crash reporting. Builds have it off unless SENTRY_DSN is set or
+# CONFIGURE_SENTRY=1 reads the DSN from 1Password; either way the value is
+# written into the bundle only, never printed or committed.
+if [ -n "${SENTRY_DSN:-}" ] || [ "${CONFIGURE_SENTRY:-0}" = "1" ]; then
+  python3 "$ROOT/scripts/configure-diagnostics.py" --plist "$APP_DIR/Contents/Info.plist"
+fi
 
 # App icon
 if [ -f "$ROOT/AppResources/AppIcon.icns" ]; then

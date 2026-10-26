@@ -32,6 +32,7 @@ jobs:
           NOTARY_API_KEY_BASE64: ${{ secrets.NOTARY_API_KEY_BASE64 }}
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          AGENT_VAULT_SENTRY_DSN: ${{ secrets.AGENT_VAULT_SENTRY_DSN }}
         run: |
           required=(
             MACOS_CERTIFICATE_BASE64
@@ -40,6 +41,7 @@ jobs:
             NOTARY_API_KEY_BASE64
             NOTARY_KEY_ID
             NOTARY_ISSUER_ID
+            AGENT_VAULT_SENTRY_DSN
           )
           for name in "${required[@]}"; do
             if [ -z "${!name:-}" ]; then
@@ -56,6 +58,22 @@ jobs:
             echo "Tag $GITHUB_REF_NAME does not match app version $app_version" >&2
             exit 1
           fi
+
+      # Before any signing material exists on the runner: a pinned release
+      # binary checked against the SHA-256 GitHub publishes for that asset,
+      # never an install script.
+      - name: Install sentry-cli
+        env:
+          SENTRY_CLI_VERSION: "3.4.2"
+          SENTRY_CLI_SHA256: "5e724365cdbbc42e4db7b1a1081adb3764dbdea5f26e94ae2124012cf65a8350"
+        run: |
+          install_dir="$RUNNER_TEMP/sentry-cli"
+          mkdir -p "$install_dir"
+          curl -sSfL -o "$install_dir/sentry-cli" \
+            "https://github.com/getsentry/sentry-cli/releases/download/$SENTRY_CLI_VERSION/sentry-cli-Darwin-universal"
+          echo "$SENTRY_CLI_SHA256  $install_dir/sentry-cli" | shasum -a 256 -c -
+          chmod 755 "$install_dir/sentry-cli"
+          echo "$install_dir" >> "$GITHUB_PATH"
 
       - name: Import Developer ID certificate
         env:
@@ -92,6 +110,9 @@ jobs:
 
       - name: Build, sign, notarize, and verify
         env:
+          # Crash reporting: every signed release carries the DSN.
+          SENTRY_DSN: ${{ secrets.AGENT_VAULT_SENTRY_DSN }}
+          REQUIRE_SENTRY_DSN: "1"
           SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
@@ -100,6 +121,25 @@ jobs:
           REQUIRE_NOTARIZED: "1"
         run: ./scripts/package-release.sh
 
+      # Only this step sees the Sentry token. Enrichment, not a release gate:
+      # a missing token or failed upload leaves a warning, and the dSYM is
+      # kept in the workflow artifact for a later scripts/upload-dsyms.sh run.
+      - name: Upload dSYM to Sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          if [ -z "${SENTRY_AUTH_TOKEN:-}" ]; then
+            echo "::warning::SENTRY_AUTH_TOKEN secret is not set; dSYM not uploaded."
+            exit 0
+          fi
+          version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' AppResources/Info.plist)"
+          build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' AppResources/Info.plist)"
+          dsym_dir="$RUNNER_TEMP/dsym"
+          mkdir -p "$dsym_dir"
+          ditto -x -k "build/AgentVault-$version.dSYM.zip" "$dsym_dir"
+          ./scripts/upload-dsyms.sh "com.oliverames.AgentVault@$version+$build" "$dsym_dir/AgentVault.app.dSYM" \
+            || echo "::warning::Sentry dSYM upload failed; retry with scripts/upload-dsyms.sh."
+
       - name: Upload signed package
         uses: actions/upload-artifact@v7
         with:
@@ -107,6 +147,7 @@ jobs:
           path: |
             dist/*.zip
             dist/*.sha256
+            build/*.dSYM.zip
           if-no-files-found: error
 
       - name: Publish GitHub release

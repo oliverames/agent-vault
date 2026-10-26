@@ -4,11 +4,14 @@ import AppKit
 struct SettingsView: View {
     @Environment(VaultStore.self) private var store
     @State private var rootError: String?
+    @State private var shareCrashReports = CrashReporting.isPreferenceOn
 
     var body: some View {
         TabView {
             scanTab
                 .tabItem { Label("Scan Roots", systemImage: "folder") }
+            privacyTab
+                .tabItem { Label("Privacy", systemImage: "hand.raised") }
             aboutTab
                 .tabItem { Label("About", systemImage: "info.circle") }
         }
@@ -91,6 +94,24 @@ struct SettingsView: View {
                 .buttonStyle(.glassProminent)
             }
         }
+    }
+
+    private var privacyTab: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Privacy")
+                .font(.title2.bold())
+            Toggle("Share Crash Reports", isOn: $shareCrashReports)
+                .toggleStyle(.switch)
+                .onChange(of: shareCrashReports) { _, enabled in
+                    CrashReporting.setEnabled(enabled)
+                }
+            Text("Sends crash reports and failed-save error codes to the developer through Sentry. Reports never include file contents, artifact names, paths, or any other inventory data.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var aboutTab: some View {
