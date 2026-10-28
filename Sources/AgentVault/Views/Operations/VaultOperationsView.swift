@@ -223,6 +223,7 @@ struct VaultOperationsView: View {
                 }.value
                 message = OperationMessage(title: title, detail: result.detail, url: result.rootURL, isError: false)
             } catch {
+                CrashReporting.report(.operations, "Vault operation failed", error: error)
                 message = OperationMessage(title: "Operation Failed", detail: error.localizedDescription, url: nil, isError: true)
             }
             isRunning = false
@@ -240,6 +241,7 @@ struct VaultOperationsView: View {
                 message = OperationMessage(title: title, detail: result.detail, url: result.rootURL, isError: false)
                 Task { await store.rescan() }
             } catch {
+                CrashReporting.report(.operations, "Restore failed", error: error)
                 message = OperationMessage(title: "Restore Failed", detail: error.localizedDescription, url: nil, isError: true)
             }
             isRunning = false

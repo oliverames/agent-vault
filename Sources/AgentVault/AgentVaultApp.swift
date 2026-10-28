@@ -3,7 +3,17 @@ import AppKit
 
 @main
 struct AgentVaultApp: App {
-    @State private var store = VaultStore()
+    @State private var store: VaultStore
+
+    init() {
+        // First, so a crash anywhere in startup is caught, and before the
+        // store exists, so a debug delivery check never scans or reads a file.
+        CrashReporting.start()
+        #if DEBUG
+        if CrashReporting.runDebugTestIfRequested() { exit(0) }
+        #endif
+        _store = State(initialValue: VaultStore())
+    }
 
     var body: some Scene {
         WindowGroup {

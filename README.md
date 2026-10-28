@@ -21,7 +21,7 @@ Version `1.0.0-beta.3` is intended for personal testing on macOS 26. The coverag
 
 ## Privacy comes first
 
-Agent Vault reads files that may contain API keys, tokens, personal instructions, or conversation-derived memory. The app does not send scan results, file contents, or analytics anywhere. Inventory data stays in memory unless you choose an export or backup operation.
+Agent Vault reads files that may contain API keys, tokens, personal instructions, or conversation-derived memory. The app does not send scan results, file contents, or analytics anywhere. Inventory data stays in memory unless you choose an export or backup operation. Signed releases send crash reports and failed-save error codes to the developer through Sentry, with no file contents, names, paths, or inventory data; turn this off in Settings > Privacy.
 
 Clean Export applies best-effort redaction to common secret fields and token formats. You still need to review an export before sharing it. Restore backups and memory exports preserve original content and may contain secrets. Read [Privacy](docs/PRIVACY.md) and the [threat model](docs/THREAT_MODEL.md) before granting Full Disk Access or sharing an export.
 

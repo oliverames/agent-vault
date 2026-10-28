@@ -38,7 +38,8 @@ Changes to scanning, exports, or restore should include a synthetic regression t
 - Preserve Swift 6 strict concurrency.
 - Keep the coverage matrix read-only until source precedence is modeled and tested.
 - Never silently overwrite a file that may have changed outside the app.
-- Do not add analytics, telemetry, or network access without discussing the privacy change first.
+- Do not add analytics, telemetry, or network access without discussing the privacy change first. Crash reporting (`Sources/AgentVault/Diagnostics/`) sends only allowlisted fields; new reports use fixed messages and error codes, never paths, names, or file contents, and need a scrubber test.
+- Local builds have crash reporting off. `CONFIGURE_SENTRY=1 scripts/build-app.sh` writes the DSN from 1Password into the bundle; a debug build then reports only with `-AgentVaultCrashReports YES`, and `-AgentVaultSentryTest message` (or `error`, `crash`) sends a fixed check and exits before any scan.
 
 ## Pull requests
 

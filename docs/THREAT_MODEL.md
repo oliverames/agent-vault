@@ -38,11 +38,11 @@ The app is not sandboxed and may receive Full Disk Access. That access is needed
 
 ### Data transmission
 
-Inventory data and previews remain local. Markdown previews use bundle-only image providers so embedded remote images are not fetched. Repository and Markdown links open in the user's default browser only after the user clicks them. The app has no telemetry code.
+Inventory data and previews remain local. Markdown previews use bundle-only image providers so embedded remote images are not fetched. Repository and Markdown links open in the user's default browser only after the user clicks them. The only outbound traffic the app starts is Sentry crash reporting in signed release builds, which the user can turn off. Its `beforeSend` keeps an allowlist of fields (exception type, stack frames with reduced paths, fixed failure messages with error domain and code, and app, macOS and Mac model contexts) and drops everything else, including error user info, so file contents, paths and inventory data cannot be attached to a report. See [Privacy](PRIVACY.md#crash-reports).
 
 ### Dependency compromise
 
-The only runtime dependency is `swift-markdown-ui`, locked through `Package.resolved`. CI builds and tests the locked dependency graph. A dependency compromise could still affect the app, so dependency changes require review.
+The runtime dependencies are `swift-markdown-ui` and `sentry-cocoa` (pinned to an exact version), locked through `Package.resolved`. CI builds and tests the locked dependency graph. A dependency compromise could still affect the app, so dependency changes require review.
 
 ## Out of scope and known limits
 

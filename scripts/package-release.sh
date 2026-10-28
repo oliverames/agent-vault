@@ -11,6 +11,9 @@ CHECKSUM_PATH="$ZIP_PATH.sha256"
 STAGE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/agent-vault-release.XXXXXX")"
 NOTARIZE="${NOTARIZE:-0}"
 SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"
+BUILD_NUMBER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")"
+SENTRY_RELEASE="com.oliverames.AgentVault@$VERSION+$BUILD_NUMBER"
+DSYM_PATH="$STAGE_DIR/AgentVault.app.dSYM"
 
 cleanup() {
   rm -rf "$STAGE_DIR"
@@ -19,7 +22,13 @@ trap cleanup EXIT
 
 cd "$ROOT"
 
-APP_DIR="$STAGE_DIR/AgentVault.app" "$ROOT/scripts/build-app.sh"
+APP_DIR="$STAGE_DIR/AgentVault.app" DSYM_PATH="$DSYM_PATH" "$ROOT/scripts/build-app.sh"
+
+# Signed releases must carry the Sentry DSN (REQUIRE_SENTRY_DSN=1 in the
+# release workflow), so a missing secret cannot ship a build with reporting off.
+if [ "${REQUIRE_SENTRY_DSN:-0}" = "1" ]; then
+  python3 "$ROOT/scripts/configure-diagnostics.py" --verify-app "$STAGE_DIR/AgentVault.app"
+fi
 
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
@@ -76,6 +85,17 @@ esac
 )
 
 "$ROOT/scripts/verify-release.sh" "$ZIP_PATH"
+
+# Keep the dSYM in build/ (not dist/, which is published), then upload it when
+# a Sentry token is available. Sentry is enrichment, not a release gate: a
+# failed upload warns, and scripts/upload-dsyms.sh can be rerun with the saved dSYM.
+mkdir -p "$ROOT/build"
+ditto -c -k --keepParent "$DSYM_PATH" "$ROOT/build/AgentVault-$VERSION.dSYM.zip"
+if [ -n "${SENTRY_AUTH_TOKEN:-}" ] || [ "${UPLOAD_DSYMS:-0}" = "1" ]; then
+  if ! "$ROOT/scripts/upload-dsyms.sh" "$SENTRY_RELEASE" "$DSYM_PATH"; then
+    echo "Warning: Sentry dSYM upload failed. Retry with scripts/upload-dsyms.sh '$SENTRY_RELEASE' <unzipped dSYM>" >&2
+  fi
+fi
 
 echo "$ZIP_PATH"
 echo "$CHECKSUM_PATH"

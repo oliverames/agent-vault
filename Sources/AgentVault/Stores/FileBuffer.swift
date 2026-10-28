@@ -98,6 +98,7 @@ final class FileBuffer {
             self.originalText = text
             return .saved
         } catch {
+            CrashReporting.report(.editor, "Save failed", error: error)
             return .error(error.localizedDescription)
         }
     }
