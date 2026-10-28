@@ -1,5 +1,15 @@
 # Agent Vault — Worklog
 
+## 2026-10-28 - Integrate completed crash reporting
+
+**What changed**: Prepared the completed Sentry branch for integration. Signed releases can carry crash reporting, and Settings can turn it off. Ordinary local builds keep it off. CI skips documentation-only changes.
+
+**Verification**: All 12 diagnostics privacy tests pass. Shell syntax checks pass, and the built executable exits successfully through `-AgentVaultSentryTest message` without a configured DSN or loading the project store. No signed release or live Sentry delivery ran during this closeout.
+
+**Left off at**: Integration and receiving CI checks are tracked in the pull request. Existing operational follow-ups below retain their dated status.
+
+---
+
 ## 2026-10-07 - Personal Plugins Migration Closeout
 
 **What changed**: Commit `7ac5126` updates AgentVault's authoring root to `~/Developer/Projects/personal-plugins` and updates marketplace examples. The related marketplace repository is `oliverames/personal-plugins`.
